@@ -1,0 +1,997 @@
+#include<raylib.h>
+#include<raymath.h>
+#include<vector>
+#include<iostream>
+#include<cmath>
+#include<random>
+using namespace std;
+
+const int MAX_BULLETS=200;
+const int SCREEN_WIDTH=2400;
+const int SCREEN_HEIGHT=1400;
+
+std::random_device rd;//随机数用
+std::mt19937 rng(rd());
+int RandomInt(int min,int max) {
+	std::uniform_int_distribution<int> dist(min,max);
+	return dist(rng);
+}
+float RandomFloat(float min,float max) {
+	std::uniform_real_distribution<float> dist(min,max);
+	return dist(rng);
+}
+
+enum class GameState
+{
+	GAMING,ASSEMBLING
+};
+enum class Type
+{
+	player
+};
+enum class PartType
+{
+	none,cy_0,cy_1,cy_2c,cy_2p,cy_3,//cy->cytosol细胞质
+	mount,//鞭毛
+	cilium_left,cilium_right//纤毛
+};
+enum class Organelle
+{
+	none,nucleus,mitochondrion,specialized_oral_groove
+};
+enum class Blockstate
+{
+	none,active
+};
+enum class Bullettype
+{
+	foodvacuole
+};
+
+struct Block
+{
+	int belongto_cell_ID;
+	Vector2 local={0.0f,0.0f};
+	Vector2 rocate={0.0f,0.0f};
+	float mass;
+	float direction=0.0f;
+	float organelle_direction=0.0f;
+	float hp;
+	float timer=0.0f;
+	PartType parttype;
+	Organelle organelle;
+	Blockstate state=Blockstate::none;
+	Block(int id,Vector2 pos,float m,float hp_,PartType ma,Organelle o)
+	{
+		belongto_cell_ID=id;
+		local=pos*32;
+		mass=m;
+		hp=hp_;
+		parttype=ma;
+		organelle=o;
+	}
+	void Drawblock(Texture2D texture,Vector2 pos,float d,float blo_d,float organ_d)
+	{
+		Rectangle source;
+		Rectangle dest;
+		dest={pos.x,pos.y,32,32};
+		Vector2 origin={16,16};
+		switch(parttype)
+		{
+		case PartType::cy_0:
+			source={32,0,32,32};
+			break;
+		case PartType::cy_1:
+			source={64,0,32,32};
+			DrawTexturePro(texture,{0,128,32,96},{pos.x,pos.y,32,96},{16,112},d+blo_d,WHITE);
+			break;
+		case PartType::cy_2p:
+			source={96,0,32,32};
+			DrawTexturePro(texture,{0,128,32,96},{pos.x,pos.y,32,96},{16,112},d+blo_d,WHITE);
+			DrawTexturePro(texture,{0,128,32,96},{pos.x,pos.y,32,96},{16,112},d+blo_d+180,WHITE);
+			break;
+		case PartType::cy_2c:
+			source={128,0,32,32};
+			DrawTexturePro(texture,{32,128,128,128},{pos.x,pos.y,128,128},{16,112},d+blo_d-90,WHITE);
+			break;
+		case PartType::cy_3:
+			source={160,0,32,32};
+			DrawTexturePro(texture,{160,128,128,224},{pos.x,pos.y,128,224},{16,112},d+blo_d-90,WHITE);
+			break;
+		case PartType::mount:
+			source={192,0,32,32};
+			break;
+		case PartType::cilium_left:
+			source={224,0,32,32};
+			break;
+		case PartType::cilium_right:
+			source={256,0,32,32};
+			break;
+		default:
+			source={0,0,32,32};
+			break;
+		}
+		DrawTexturePro(texture,source,dest,origin,d+blo_d,WHITE);
+		if(organelle!=Organelle::none)
+		{
+			switch(organelle)
+			{
+			case Organelle::nucleus:
+				source={32,32,32,32};
+				break;
+			case Organelle::mitochondrion:
+				source={64,32,32,32};
+				break;
+			case Organelle::specialized_oral_groove:
+				source={96,32,64,32};
+				dest.width=64;
+				DrawTexturePro(texture,{0,352,192,32},{pos.x,pos.y,600,96},{0,48},organ_d,{100,255,100,150});
+				DrawTexturePro(texture,source,dest,origin,organ_d,WHITE);
+				return;
+				break;
+			default:
+				source={0,32,32,32};
+				break;
+			}
+			DrawTexturePro(texture,source,dest,origin,d+blo_d+organ_d,WHITE);
+		}
+	}
+};
+
+struct Flagellum_point
+{
+	Vector2 position;
+	Flagellum_point(Vector2 pos)
+	{
+		position=pos;
+	}
+};
+
+struct Flagellum
+{
+	int baseblock_index;
+	float timer=0.0f;
+	vector<Flagellum_point> Flagellum_points;
+};
+
+struct Bullet
+{
+	Vector2 position,velocity;
+	float direction;
+	float damage;
+	float lifetime;
+	bool is_active=false;
+	Bullettype type;
+	int belongto_living_index;
+};
+
+struct BulletPool
+{
+	Bullet Bullets[MAX_BULLETS];
+	int count=0;
+	void fire(Bullettype type,int belongto_living_index,Vector2 pos,float direction)
+	{
+		int index=-1;
+		int oldest_index;
+		float oldest_lifetime=1e6,v;
+		for(int i=0;i<MAX_BULLETS;i++)
+		{
+			if(Bullets[i].lifetime<oldest_lifetime)
+			{
+				oldest_index=i;
+				oldest_lifetime=Bullets[i].lifetime;
+			}
+			if(!Bullets[i].is_active)
+			{
+				index=i;
+				break;
+			}
+		}
+		if(index==-1) index=oldest_index;
+		Bullets[index].type=type;
+		switch(type)
+		{
+		case Bullettype::foodvacuole:
+			Bullets[index].damage=5.0f;
+			Bullets[index].lifetime=10.0f;
+			v=50.0f;
+			break;
+		default:
+			return;
+		}
+		Bullets[index].is_active=true;
+		count++;
+		Bullets[index].belongto_living_index=belongto_living_index;
+		float rad=DEG2RAD*direction;
+		Bullets[index].velocity.x=cosf(rad)*v;
+		Bullets[index].velocity.y=sinf(rad)*v;
+		Bullets[index].position.x=pos.x+cosf(rad)*80;
+		Bullets[index].position.y=pos.y+sinf(rad)*80;
+		Bullets[index].direction=direction;
+		return;
+	}
+};
+BulletPool Bullet_pool;
+
+Vector2 shake;
+
+struct Findblockpickresult
+{
+	bool is_part;
+	bool is_cytosol;
+	int block_index;
+	bool is_nucleus;
+};
+
+struct Cell
+{
+	int id;
+	Vector2 velocity={0.0f,0.0f};
+	Vector2 position={0.0f,0.0f};
+	float vd=0.0f;
+	float direction=0.0f;
+	Vector2 center={0.0f,0.0f};
+	float mass=0.0f;
+	float inertia=0.0f;
+	Type type;
+	float sind;
+	float cosd;
+	vector<Block> Blocks;
+	vector<Flagellum> Flagella;
+	
+	void update(float deltaT)
+	{
+		velocity=velocity*0.9f;
+		vd*=0.9;
+		position=position+velocity;
+		direction+=vd;
+		mass=0.0f;
+		float rad=DEG2RAD*direction;
+		sind=sinf(rad);
+		cosd=cosf(rad);
+		for(auto& block:Blocks)
+		{
+			mass+=block.mass;
+			block.rocate.x=(block.local.x-center.x)*cosd-(block.local.y-center.y)*sind;
+			block.rocate.y=(block.local.x-center.x)*sind+(block.local.y-center.y)*cosd;
+			if(block.timer>0.0f) block.timer-=deltaT;
+			if(block.state==Blockstate::active)
+			{
+				switch(block.organelle)
+				{
+				case Organelle::none:
+				{
+					float sum_d=direction+block.direction;
+					float rad;
+					switch(block.parttype)
+					{
+					case PartType::mount:
+						sum_d+=90;
+						rad=sum_d*DEG2RAD;
+						force(block.rocate,{cosf(rad)*150*deltaT,sinf(rad)*150*deltaT});
+						break;
+					case PartType::cilium_left:
+						sum_d+=0;
+						rad=sum_d*DEG2RAD;
+						force(block.rocate,{cosf(rad)*80*deltaT,sinf(rad)*80*deltaT});
+						break;
+					case PartType::cilium_right:
+						sum_d+=180;
+						rad=sum_d*DEG2RAD;
+						force(block.rocate,{cosf(rad)*80*deltaT,sinf(rad)*80*deltaT});
+						break;
+					default:
+						break;
+					}
+					break;
+				}
+				case Organelle::specialized_oral_groove:
+					if(block.timer<=0)
+					{
+						Bullet_pool.fire(Bullettype::foodvacuole,id,{position.x+block.rocate.x,position.y+block.rocate.y},block.organelle_direction);
+						float rad=DEG2RAD*block.organelle_direction;
+						force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
+						shake.x+=RandomFloat(-20.0f,20.0f);
+						shake.y+=RandomFloat(-20.0f,20.0f);
+						block.timer=0.2f;
+					}
+				default:
+					break;
+				}
+			}
+		}
+		for(auto& this_flagellum:Flagella)
+		{
+			if(Blocks[this_flagellum.baseblock_index].state==Blockstate::active)
+			{
+				this_flagellum.timer+=18*deltaT;
+			}
+			this_flagellum.timer+=2*deltaT;
+			if(this_flagellum.timer>2*PI) this_flagellum.timer-=2*PI;
+			this_flagellum.Flagellum_points[0].position.x=position.x+Blocks[this_flagellum.baseblock_index].rocate.x-sind*15*sinf(this_flagellum.timer);
+			this_flagellum.Flagellum_points[0].position.y=position.y+Blocks[this_flagellum.baseblock_index].rocate.y+cosd*15*sinf(this_flagellum.timer);
+			for(size_t i=1;i<this_flagellum.Flagellum_points.size();i++)
+			{
+				Vector2 d=this_flagellum.Flagellum_points[i].position-this_flagellum.Flagellum_points[i-1].position;
+				float r=sqrtf(d.x*d.x+d.y*d.y);
+				this_flagellum.Flagellum_points[i].position=this_flagellum.Flagellum_points[i-1].position+d*25/r;
+			}
+		}
+	}
+	bool need_to_found_center=true;
+	void found_center()
+	{
+		if(Blocks.empty()) return;
+		float sum_mass=0.0f;
+		Vector2 center0=center;
+		center={0.0f,0.0f};
+		for(const auto& it:Blocks)
+		{
+			center+=it.local*it.mass;
+			sum_mass+=it.mass;
+			printf("center:(%.5f,%.5f)\n",center.x,center.y);
+			printf("sum_mass:%.5f\n",sum_mass);
+		}
+		center.x/=sum_mass;
+		center.y/=sum_mass;
+		position=position+center-center0;
+		inertia=0.0f;
+		for(const auto& block:Blocks)
+		{
+			Vector2 d=block.local-center;
+			d.x/=7.0f;
+			d.y/=7.0f;
+			float r_sq=d.x*d.x+d.y*d.y;
+			inertia+=block.mass*r_sq;
+		}
+	}
+	bool Check_other_blocks(Vector2 local)
+	{
+		for(const auto& block:Blocks)
+		{
+			if(block.local.x==local.x && block.local.y==local.y)
+			{
+				int index=static_cast<int>(block.parttype);
+				return (index>=1 && index<6);
+			}
+		}
+		return false;
+	}
+	bool need_to_update_tiles=true;
+	void update_tiles()
+	{
+		Flagella.clear();
+		int index=0;
+		for(auto& block:Blocks)
+		{
+			int up=0,left=0,down=0,right=0;
+			up=Check_other_blocks({block.local.x,block.local.y-32});
+			left=Check_other_blocks({block.local.x-32,block.local.y});
+			down=Check_other_blocks({block.local.x,block.local.y+32});
+			right=Check_other_blocks({block.local.x+32,block.local.y});
+			
+			int self_m=static_cast<int>(block.parttype);
+			if(self_m>=1 && self_m<6)
+			{
+				int tot=up+left+down+right;
+				if(tot==0)
+				{
+					block.parttype=PartType::none;
+				}
+				if(tot==1)
+				{
+					block.parttype=PartType::cy_3;
+					if(up==1) block.direction=180.0f;
+					if(left==1) block.direction=90.0f;
+					if(down==1) block.direction=0.0f;
+					if(right==1) block.direction=-90.0f;
+				}
+				if(tot==2)
+				{
+					if(up==1 && left==1){block.parttype=PartType::cy_2c;block.direction=180.0f;}
+					if(left==1 && down==1){block.parttype=PartType::cy_2c;block.direction=90.0f;}
+					if(down==1 && right==1){block.parttype=PartType::cy_2c;block.direction=0.0f;}
+					if(right==1 && up==1){block.parttype=PartType::cy_2c;block.direction=-90.0f;}
+					if(up==1 && down==1){block.parttype=PartType::cy_2p;block.direction=90.0f;}
+					if(left==1 && right==1){block.parttype=PartType::cy_2p;block.direction=0.0f;}
+				}
+				if(tot==3)
+				{
+					block.parttype=PartType::cy_1;
+					if(up==0) block.direction=0.0f;
+					if(left==0) block.direction=-90.0f;
+					if(down==0) block.direction=180.0f;
+					if(right==0) block.direction=90.0f;
+				}
+				if(tot==4)
+				{
+					block.parttype=PartType::cy_0;
+					block.direction=0.0f;
+				}
+			}
+			if(self_m>=6 && self_m<9)
+			{
+				if(up==1) block.direction=180.0f;
+				if(left==1) block.direction=90.0f;
+				if(down==1) block.direction=0.0f;
+				if(right==1) block.direction=-90.0f;
+				if(block.parttype==PartType::mount)
+				{
+					Flagellum this_flagellum;
+					this_flagellum.baseblock_index=index;
+					for(int i=1;i<=8;i++)
+					{
+						Vector2 pos={(float)-i+position.x+block.rocate.x,0};
+						this_flagellum.Flagellum_points.emplace_back(pos);
+					}
+					Flagella.push_back(this_flagellum);
+				}
+			}
+			index++;
+		}
+	}
+	void force(Vector2 actionpoint,Vector2 f)
+	{
+		velocity.x+=f.x/mass;
+		velocity.y+=f.y/mass;
+		float torque=actionpoint.x*f.y-actionpoint.y*f.x;
+		vd+=torque/inertia;
+	}
+	Findblockpickresult Find_block_localposition(Vector2 local)
+	{
+		int index=0;
+		for(const auto& block:Blocks)
+		{
+			if(block.local==local)
+			{
+				int parttype_id=static_cast<int>(block.parttype);
+				if(parttype_id>=1 && parttype_id<6)
+				{
+					return {true,true,index,block.organelle==Organelle::nucleus};
+				}
+				else
+				{
+					return {true,false,index,false};
+				}
+			}
+			index++;
+		}
+		return {false,false,-1,false};
+	}
+};
+vector<Cell> Livings;
+
+struct UI
+{
+	Vector2 position={0,0},moveto;
+	float lerp=0.15f;
+	Vector2 position2={0,0},moveto2;
+	float lerp2=0.15f;
+	bool fold,left,active=false;
+	void update()
+	{
+		position+=(moveto-position)*lerp;
+		if(fold)
+		{
+			position2+=(Vector2Negate(position2))*lerp2;
+		}
+		else
+		{
+			position2+=(moveto2-position2)*lerp2;
+		}
+	}
+	void draw(Texture2D texture,Font font,string text)
+	{
+		const float scale=1.7f;
+		Rectangle source;
+		if(left) source={0,0,284,56};
+		else source={0,70,284,56};
+		DrawTexturePro(texture,source,{position.x,position.y,284*scale,56*scale},{0,0},0.0f,WHITE);
+		DrawTexturePro(texture,{0,56,284,1},{position.x,position.y+56*scale,284*scale,position.y+position2.y+4*scale},{0,0},0.0f,WHITE);
+		DrawTexturePro(texture,{0,56,284,13},{position.x,position.y+position2.y+112,284*scale,26*scale},{0,0},0.0f,WHITE);
+		if(left)
+		{
+			DrawTextEx(font,text.c_str(),{position.x+50,position.y+28},48,0,WHITE);
+		}
+		else
+		{
+			DrawTextEx(font,text.c_str(),{position.x+240,position.y+28},48,0,WHITE);
+		}
+	}
+};
+
+struct Part
+{
+	int id;
+	string name;
+	Rectangle source;
+	float mass;
+	float hp;
+	PartType parttype;
+	Organelle organelle;
+	float retimer;
+	float timer;
+	Vector2 position;
+	Rectangle dest,dest2;
+	bool pressed=false;
+	bool is_hovering;
+	void update(float deltaT,Vector2 pos,float scale,float spacing,float width,UI &ui)
+	{
+		if(timer>-0.1)
+		{
+			timer-=deltaT;
+		}
+		int raw=width/(44*scale+spacing);
+		int grid_x=(id%raw);
+		int grid_y=(id/raw);
+		Vector2 grid={(float)grid_x,(float)grid_y};
+		position=pos+grid*44*scale+grid*spacing;
+		dest={position.x,position.y,44*scale,44*scale};
+		if(!pressed)
+		{
+			dest2.x=dest.x;
+			dest2.y=dest.y;
+			dest2.width=32*scale;
+			dest2.height=32*scale;
+		}
+		else
+		{
+			dest2={GetMouseX()-22*scale,GetMouseY()-22*scale,32*scale,32*scale};
+		}
+	}
+	void draw(Texture2D texture_back,Texture2D texture,float scale)
+	{
+		if(timer>0) return;
+		Rectangle back_source;
+		if(timer>-0.1)
+		{
+			back_source={284,0,44,44};
+		}
+		else
+		{
+			if(is_hovering) back_source={372,0,44,44};
+			else back_source={328,0,44,44};
+		}
+		DrawTexturePro(texture_back,back_source,dest,{0,0},0.0f,WHITE);
+		if(timer>-0.1) return;
+		DrawTexturePro(texture,source,dest2,{-6*scale,-6*scale},0.0f,WHITE);
+	}
+};
+
+float point_to_point(float x1,float y1,float x2,float y2)
+{
+	return RAD2DEG*atan2f(y2-y1,x2-x1);
+}
+
+int mod(int a,int b)
+{
+	return (a%b+b)%b;
+}
+
+void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1)
+{
+	mouseworldposition=GetScreenToWorld2D(GetMousePosition(),gamecamera);
+	if(IsKeyPressed(KEY_E)) 
+	{
+		zooming=true;
+	}
+	shake.x*=RandomFloat(-0.99f,-0.5f);
+	shake.y*=RandomFloat(-0.99f,-0.5f);
+	for(int i=0;i<MAX_BULLETS;i++)//遍历子弹
+	{
+		if(Bullet_pool.Bullets[i].is_active)
+		{
+			Bullet_pool.Bullets[i].lifetime-=deltaT;
+			if(Bullet_pool.Bullets[i].lifetime<0)
+			{
+				Bullet_pool.Bullets[i].is_active=false;
+				Bullet_pool.count--;
+				continue;
+			}
+			Bullet_pool.Bullets[i].position.x+=Bullet_pool.Bullets[i].velocity.x;
+			Bullet_pool.Bullets[i].position.y+=Bullet_pool.Bullets[i].velocity.y;
+		}
+	}
+	for(auto& it:Livings)//遍历生物
+	{
+		if(it.need_to_found_center)//是否需要重新计算重心
+		{
+			it.need_to_found_center=false;
+			it.found_center();
+		}
+		if(it.need_to_update_tiles)
+		{
+			it.need_to_update_tiles=false;
+			it.update_tiles();
+		}
+		it.update(deltaT);
+		if(it.type==Type::player)
+		{
+			for(auto& block:it.Blocks)
+			{
+				switch(block.organelle)
+				{
+				case Organelle::specialized_oral_groove:
+					block.organelle_direction=point_to_point(it.position.x+block.rocate.x,it.position.y+block.rocate.y,mouseworldposition.x,mouseworldposition.y);
+					if(IsMouseButtonDown(MOUSE_BUTTON_LEFT) && !zooming) block.state=Blockstate::active;
+					else block.state=Blockstate::none;
+					break;
+				case Organelle::nucleus:
+					gamecamera.target.x+=(it.position.x+block.rocate.x-gamecamera.target.x)*0.15;
+					gamecamera.target.y+=(it.position.y+block.rocate.y-gamecamera.target.y)*0.15;
+					if(zooming)
+					{
+						gamecamera.zoom+=gamecamera.zoom*gamecamera.zoom*deltaT;
+						if(gamecamera.zoom>=400.0f)
+						{
+							zooming=false;
+							assemcamera.zoom=0.01;
+							ui1.moveto={30,50};
+							ui1.moveto2={0,400};
+							ui1.position2={0,0};
+							for(auto& it:Partlibrary)
+							{
+								it.timer=it.retimer;
+							}
+							interface=GameState::ASSEMBLING;
+						}
+					}
+					else
+					{
+						gamecamera.zoom+=(1.0f-gamecamera.zoom)*0.1;
+						gamecamera.offset.x=(SCREEN_WIDTH/2)+shake.x;
+						gamecamera.offset.y=(SCREEN_HEIGHT/2)+shake.y;
+					}
+					break;
+				case Organelle::none:
+					switch(block.parttype)
+					{
+					case PartType::mount:
+						if(IsKeyDown(KEY_W) && !zooming) block.state=Blockstate::active;
+						else block.state=Blockstate::none;
+						break;
+					case PartType::cilium_left:
+						if(IsKeyDown(KEY_D) && !zooming) block.state=Blockstate::active;
+						else block.state=Blockstate::none;
+						break;
+					case PartType::cilium_right:
+						if(IsKeyDown(KEY_A) && !zooming) block.state=Blockstate::active;
+						else block.state=Blockstate::none;
+						break;
+					default:
+						break;
+					}
+				default:
+					break;
+				}
+			}
+		}
+	}
+}
+void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Vector2& UI1_grid)
+{
+	mouseworldposition=GetScreenToWorld2D(GetMousePosition(),assemcamera);
+	assemcamera.target=Vector2Scale(mouseworldposition,0.2f);
+	ui1.update();
+	UI1_grid.x=(int)roundf(((mouseworldposition.x+Livings[0].center.x)/32.0f));
+	UI1_grid.y=(int)roundf(((mouseworldposition.y+Livings[0].center.y)/32.0f));
+	if(!zooming)
+	{
+		if(ui1.position.x>0.0f) ui1.fold=false;
+		if(ui1.active)
+		{
+			assemcamera.zoom+=(3.5f-assemcamera.zoom)*0.1;
+			if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+			{
+				Part this_part;
+				for(const auto& part:Partlibrary)
+				{
+					if(part.pressed)
+					{
+						this_part=part;
+						break;
+					}
+				}
+				Findblockpickresult result;
+				if(this_part.organelle==Organelle::none)
+				{
+					if(this_part.parttype==PartType::none)
+					{
+						result=Livings[0].Find_block_localposition(UI1_grid*32);
+						if(result.is_part)
+						{
+							Livings[0].Blocks.erase(Livings[0].Blocks.begin()+result.block_index);
+							Livings[0].found_center();
+							Livings[0].update_tiles();
+						}
+					}
+					else
+					{
+						int sum=0;
+						result=Livings[0].Find_block_localposition({(UI1_grid.x+1)*32,(UI1_grid.y+0)*32});
+						sum+=result.is_cytosol;
+						result=Livings[0].Find_block_localposition({(UI1_grid.x-1)*32,(UI1_grid.y+0)*32});
+						sum+=result.is_cytosol;
+						result=Livings[0].Find_block_localposition({(UI1_grid.x+0)*32,(UI1_grid.y+1)*32});
+						sum+=result.is_cytosol;
+						result=Livings[0].Find_block_localposition({(UI1_grid.x+0)*32,(UI1_grid.y-1)*32});
+						sum+=result.is_cytosol;
+						if(sum>0)
+						{
+							result=Livings[0].Find_block_localposition({(UI1_grid.x)*32,(UI1_grid.y)*32});
+							if(result.is_part)
+							{
+								Livings[0].Blocks[result.block_index].parttype=this_part.parttype;
+								Livings[0].Blocks[result.block_index].organelle=Organelle::none;
+							}
+							else
+							{
+								Block block(Livings[0].id,UI1_grid,this_part.mass,this_part.hp,this_part.parttype,this_part.organelle);
+								Livings[0].Blocks.push_back(block);
+							}
+							Livings[0].found_center();
+							Livings[0].update_tiles();
+						}
+					}
+				}
+				else
+				{
+					result=Livings[0].Find_block_localposition({UI1_grid.x*32,UI1_grid.y*32});
+					if(result.is_cytosol)
+					{
+						Livings[0].Blocks[result.block_index].organelle=this_part.organelle;
+					}
+				}
+			}
+		}
+		else
+		{
+			assemcamera.zoom+=(1.5f-assemcamera.zoom)*0.06;
+		}
+	}
+	else
+	{
+		ui1.fold=true;
+		ui1.position2.y=0;
+		assemcamera.zoom-=4.0f*deltaT;
+		if(assemcamera.zoom<1.0f) ui1.moveto.x=-650;
+		if(assemcamera.zoom<0.05f)
+		{
+			gamecamera.zoom=400.0f;
+			zooming=false;
+			interface=GameState::GAMING;
+		}
+	}
+	if(IsKeyPressed(KEY_E)) zooming=true;
+	if(ui1.position2.y>300)
+	{
+		for(auto& it:Partlibrary)
+		{
+			float scale=1.6f;
+			it.update(deltaT,{ui1.position.x+40,ui1.position.y+140},scale,10.0f,284*1.7-80,ui1);
+			bool is_hovering=CheckCollisionPointRec(GetMousePosition(),it.dest);
+			if(!it.pressed)
+			{
+				it.dest2.x=it.dest.x;
+				it.dest2.y=it.dest.y;
+				it.dest2.width=32*scale;
+				it.dest2.height=32*scale;
+				if(is_hovering && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+				{
+					for(auto& this_part:Partlibrary)
+					{
+						this_part.pressed=false;
+					}
+					it.pressed=true;
+					ui1.active=true;
+				}
+			}
+			else
+			{
+				it.dest2={GetMouseX()-22*scale,GetMouseY()-22*scale,32*scale,32*scale};
+				if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+				{
+					it.pressed=false;
+					ui1.active=false;
+				}
+			}
+		}
+	}
+}
+
+void DrawGaming(Texture2D texture_all_parts,Texture2D background,Camera2D gamecamera)
+{
+	DrawTexturePro(background,{0,0,1600,900},{0,0,SCREEN_WIDTH,SCREEN_HEIGHT},{0,0},0.0f,WHITE);
+	BeginMode2D(gamecamera);
+	if(gamecamera.zoom>=0.05f)
+	{
+		float halfW=(SCREEN_WIDTH/2.0f)/gamecamera.zoom;//画网格
+		float halfH=(SCREEN_HEIGHT/2.0f)/gamecamera.zoom;
+		float left=gamecamera.target.x-halfW;
+		float right=gamecamera.target.x+halfW;
+		float top=gamecamera.target.y-halfH;
+		float bottom=gamecamera.target.y+halfH;
+		float gridSize=100.0f;
+		float startX=floorf(left/gridSize)*gridSize;
+		float startY=floorf(top/gridSize)*gridSize;
+		for(float x=startX;x<=right;x+=gridSize)
+		{
+			DrawLineEx({x,top},{x,bottom},5,{255,255,255,15});
+		}
+		for(float y=startY;y<=bottom;y+=gridSize)
+		{
+			DrawLineEx({left,y},{right,y},5,{255,255,255,15});
+		}
+	}
+	for(auto& it:Livings)
+	{
+		for(auto& block:it.Blocks)
+		{
+			block.Drawblock(texture_all_parts,it.position+block.rocate,it.direction,block.direction,block.organelle_direction);
+		}
+		for(const auto& this_flagellum:it.Flagella)
+		{
+			for(const auto& this_point:this_flagellum.Flagellum_points)
+			{
+				DrawTexturePro(texture_all_parts,{32,64,32,32},{this_point.position.x,this_point.position.y,32,32},{16,16},0.0f,WHITE);
+			}
+		}
+	}
+	for(int i=0;i<MAX_BULLETS;i++)
+	{
+		if(Bullet_pool.Bullets[i].is_active)
+		{
+			Rectangle source;
+			Rectangle dest={Bullet_pool.Bullets[i].position.x,Bullet_pool.Bullets[i].position.y,0,32};
+			switch(Bullet_pool.Bullets[i].type)
+			{
+			case Bullettype::foodvacuole:
+				source={32,96,160,32};
+				dest.width=160;
+				break;
+			default:
+				source={0,96,32,32};
+				dest.width=32;
+				break;
+			};
+			DrawTexturePro(texture_all_parts,source,dest,{96,16},Bullet_pool.Bullets[i].direction,WHITE);
+			dest.width=256;dest.height=256;
+			DrawTexturePro(texture_all_parts,{0,256,96,96},dest,{128,128},Bullet_pool.Bullets[i].direction,{0,255,0,100});
+		}
+	}
+	EndMode2D();
+}
+void DrawAssembling(Texture2D texture_all_parts,Texture2D texture_ui,Camera2D assemcamera,UI ui1,Vector2 UI1_grid,Font font,vector<Part>&Partlibrary)
+{
+	ClearBackground(BLACK);
+	ui1.draw(texture_ui,font,"零件库");
+	if(ui1.position2.y>300)
+	{
+		for(auto& it:Partlibrary)
+		{
+			it.draw(texture_ui,texture_all_parts,1.6f);
+		}
+	}
+	BeginMode2D(assemcamera);
+	for(auto& block:Livings[0].Blocks)
+	{
+		block.Drawblock(texture_all_parts,block.local-Livings[0].center,0.0f,block.direction,0.0f);
+	}
+	if(ui1.active)
+	{
+		DrawTexturePro(texture_ui,{284,44,34,34},{UI1_grid.x*32.0f-Livings[0].center.x,UI1_grid.y*32.0f-Livings[0].center.y,34,34},{17,17},0.0f,WHITE);
+	}
+	EndMode2D();
+}
+
+
+
+int main()
+{	
+	InitWindow(SCREEN_WIDTH,SCREEN_HEIGHT,"MadCells");
+	SetTargetFPS(60);
+	
+	GameState interface=GameState::GAMING;
+	bool zooming=false;
+	
+	Vector2 mouseworldposition;
+	
+	Camera2D gamecamera={0};
+	gamecamera.target={0,0};
+	gamecamera.offset={SCREEN_WIDTH/2,SCREEN_HEIGHT/2};
+	gamecamera.rotation=0.0f;
+	gamecamera.zoom=1.0f;
+	Camera2D assemcamera={0};
+	assemcamera.target={0,0};
+	assemcamera.offset={SCREEN_WIDTH/2,SCREEN_HEIGHT/2};
+	assemcamera.rotation=0.0f;
+	assemcamera.zoom=1.0f;
+	
+	Texture2D background=LoadTexture("asset/background.png");
+	Texture2D texture_all_parts=LoadTexture("asset/parts.png");
+	Texture2D texture_ui=LoadTexture("asset/ui.png");
+	
+	Cell player;
+	player.id=0;
+	player.type=Type::player;
+	player.position={0.0f,0.0f};
+	player.direction=0.0f;
+	player.Blocks.emplace_back(0,Vector2{-1,0},1.5f,50.0f,PartType::cy_0,Organelle::nucleus);//cytosol细胞质，nucleus细胞核
+	player.Blocks.emplace_back(0,Vector2{0,0},1.1f,50.0f,PartType::cy_0,Organelle::mitochondrion);//mitochondrion线粒体
+	player.Blocks.emplace_back(0,Vector2{1,0},1.5f,50.0f,PartType::cy_0,Organelle::specialized_oral_groove);//“特化口沟”
+	player.Blocks.emplace_back(0,Vector2{-2,0},0.4f,30.0f,PartType::mount,Organelle::none);//鞭毛
+	player.Blocks.emplace_back(0,Vector2{0,-1},0.3f,20.0f,PartType::cilium_left,Organelle::none);//纤毛
+	player.Blocks.emplace_back(0,Vector2{0,1},0.3f,20.0f,PartType::cilium_right,Organelle::none);
+	Livings.push_back(player);
+	
+	for(int i=0;i<MAX_BULLETS;i++)
+	{
+		Bullet_pool.Bullets[i].is_active=false;
+	}
+	
+	UI ui1,ui2,ui3,ui4;
+	ui1.fold=true;
+	ui1.position={-400.0f,50.0f};
+	ui1.left=true;
+	Vector2 UI1_grid;//UI1放置时的网格坐标
+	
+	string all_text="零件库属性板";
+	int codepointcount;
+	int* codepoints=LoadCodepoints(all_text.c_str(),&codepointcount);
+	Font font=LoadFontEx("fonts/Madfont.ttf",48,codepoints,codepointcount);
+	
+	vector<Part> Partlibrary=
+	{
+		{0,"空",{0,0,32,32},0.0f,0.0f,PartType::none,Organelle::none,0.0f},
+		{1,"细胞质块",{128,0,32,32},1.0f,50.0f,PartType::cy_0,Organelle::none,0.1F},
+		{2,"鞭毛基底",{192,0,32,32},0.4F,30.0F,PartType::mount,Organelle::none,0.2F},
+		{3,"左纤毛",{224,0,32,32},0.3f,20.0f,PartType::cilium_left,Organelle::none,0.3f},
+		{4,"右纤毛",{256,0,32,32},0.2f,20.0f,PartType::cilium_right,Organelle::none,0.4f},
+		{5,"细胞核",{32,32,32,32},0.5f,0.0f,PartType::none,Organelle::nucleus,0.5f},
+		{6,"线粒体",{64,32,32,32},0.1f,0.0f,PartType::none,Organelle::mitochondrion,0.6f},
+		{7,"特化口沟",{96,32,64,32},0.5f,0.0f,PartType::none,Organelle::specialized_oral_groove,0.7f},
+	};
+	
+	while(!WindowShouldClose())
+	{
+		float deltaT=GetFrameTime();
+		switch(interface)//游戏界面
+		{
+		case GameState::GAMING:
+		{
+			UpdateGaming(deltaT,interface,gamecamera,assemcamera,mouseworldposition,zooming,Partlibrary,ui1);
+			break;
+		}
+		case GameState::ASSEMBLING:
+		{
+			UpdateAssembling(deltaT,interface,gamecamera,assemcamera,mouseworldposition,zooming,Partlibrary,ui1,UI1_grid);
+			break;
+		}
+		default:break;
+		}
+		BeginDrawing();
+		switch(interface)
+		{
+		case GameState::GAMING:
+		{
+			DrawGaming(texture_all_parts,background,gamecamera);
+			break;
+		}
+		case GameState::ASSEMBLING:
+		{
+			DrawAssembling(texture_all_parts,texture_ui,assemcamera,ui1,UI1_grid,font,Partlibrary);
+			break;
+		}
+		default:break;
+		}
+		EndDrawing();
+	}
+	CloseWindow();
+	
+	UnloadTexture(background);
+	UnloadTexture(texture_all_parts);
+	UnloadTexture(texture_ui);
+	
+	return 0;
+}
+
