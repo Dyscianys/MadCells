@@ -1,6 +1,7 @@
 #include<raylib.h>
 #include<raymath.h>
 #include<vector>
+#include<queue>
 #include<iostream>
 #include<cmath>
 #include<random>
@@ -318,7 +319,6 @@ struct Cell
 			}
 		}
 	}
-	bool need_to_found_center=true;
 	void found_center()
 	{
 		if(Blocks.empty()) return;
@@ -357,75 +357,122 @@ struct Cell
 		}
 		return false;
 	}
-	bool need_to_update_tiles=true;
-	void update_tiles()
+	bool need_to_rebuild=true;
+	void rebulildcell()
 	{
+		int nucleusIndex=-1;
+		for(size_t i=0;i<Blocks.size();++i)
+			if(Blocks[i].organelle==Organelle::nucleus) {nucleusIndex=i;break;}
+		if(nucleusIndex==-1) return;
+		vector<bool> connected(Blocks.size(), false);
+		queue<int> q;
+		q.push(nucleusIndex);
+		connected[nucleusIndex]=true;
+		while(!q.empty())
+		{
+			int idx=q.front();q.pop();
+			Vector2 pos=Blocks[idx].local;
+			Vector2 dirs[4]={{0,-32},{0,32},{-32,0},{32,0}};
+			for(auto& d:dirs)
+			{
+				Vector2 nPos={pos.x+d.x,pos.y+d.y};
+				for (size_t j=0;j<Blocks.size();++j)
+				{
+					if (!connected[j] && Blocks[j].local==nPos)
+					{
+						connected[j]=true;
+						q.push(j);
+					}
+				}
+			}
+		}
+		for (auto it = Blocks.begin(); it != Blocks.end(); ) {
+			int idx = it - Blocks.begin();
+			if (!connected[idx])
+			{
+				it = Blocks.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+		found_center();
 		Flagella.clear();
 		int index=0;
-		for(auto& block:Blocks)
+		for(auto block=Blocks.begin();block!=Blocks.end();)
 		{
+			bool is_illegal=false;
 			int up=0,left=0,down=0,right=0;
-			up=Check_other_blocks({block.local.x,block.local.y-32});
-			left=Check_other_blocks({block.local.x-32,block.local.y});
-			down=Check_other_blocks({block.local.x,block.local.y+32});
-			right=Check_other_blocks({block.local.x+32,block.local.y});
+			up=Check_other_blocks({block->local.x,block->local.y-32});
+			left=Check_other_blocks({block->local.x-32,block->local.y});
+			down=Check_other_blocks({block->local.x,block->local.y+32});
+			right=Check_other_blocks({block->local.x+32,block->local.y});
 			
-			int self_m=static_cast<int>(block.parttype);
+			int tot=up+left+down+right;
+			if(tot==0)
+			{
+				is_illegal=true;
+			}
+			int self_m=static_cast<int>(block->parttype);
 			if(self_m>=1 && self_m<6)
 			{
-				int tot=up+left+down+right;
-				if(tot==0)
-				{
-					block.parttype=PartType::none;
-				}
 				if(tot==1)
 				{
-					block.parttype=PartType::cy_3;
-					if(up==1) block.direction=180.0f;
-					if(left==1) block.direction=90.0f;
-					if(down==1) block.direction=0.0f;
-					if(right==1) block.direction=-90.0f;
+					block->parttype=PartType::cy_3;
+					if(up==1) block->direction=180.0f;
+					if(left==1) block->direction=90.0f;
+					if(down==1) block->direction=0.0f;
+					if(right==1) block->direction=-90.0f;
 				}
 				if(tot==2)
 				{
-					if(up==1 && left==1){block.parttype=PartType::cy_2c;block.direction=180.0f;}
-					if(left==1 && down==1){block.parttype=PartType::cy_2c;block.direction=90.0f;}
-					if(down==1 && right==1){block.parttype=PartType::cy_2c;block.direction=0.0f;}
-					if(right==1 && up==1){block.parttype=PartType::cy_2c;block.direction=-90.0f;}
-					if(up==1 && down==1){block.parttype=PartType::cy_2p;block.direction=90.0f;}
-					if(left==1 && right==1){block.parttype=PartType::cy_2p;block.direction=0.0f;}
+					if(up==1 && left==1){block->parttype=PartType::cy_2c;block->direction=180.0f;}
+					if(left==1 && down==1){block->parttype=PartType::cy_2c;block->direction=90.0f;}
+					if(down==1 && right==1){block->parttype=PartType::cy_2c;block->direction=0.0f;}
+					if(right==1 && up==1){block->parttype=PartType::cy_2c;block->direction=-90.0f;}
+					if(up==1 && down==1){block->parttype=PartType::cy_2p;block->direction=90.0f;}
+					if(left==1 && right==1){block->parttype=PartType::cy_2p;block->direction=0.0f;}
 				}
 				if(tot==3)
 				{
-					block.parttype=PartType::cy_1;
-					if(up==0) block.direction=0.0f;
-					if(left==0) block.direction=-90.0f;
-					if(down==0) block.direction=180.0f;
-					if(right==0) block.direction=90.0f;
+					block->parttype=PartType::cy_1;
+					if(up==0) block->direction=0.0f;
+					if(left==0) block->direction=-90.0f;
+					if(down==0) block->direction=180.0f;
+					if(right==0) block->direction=90.0f;
 				}
 				if(tot==4)
 				{
-					block.parttype=PartType::cy_0;
-					block.direction=0.0f;
+					block->parttype=PartType::cy_0;
+					block->direction=0.0f;
 				}
 			}
 			if(self_m>=6 && self_m<9)
 			{
-				if(up==1) block.direction=180.0f;
-				if(left==1) block.direction=90.0f;
-				if(down==1) block.direction=0.0f;
-				if(right==1) block.direction=-90.0f;
-				if(block.parttype==PartType::mount)
+				if(up==1) block->direction=180.0f;
+				if(left==1) block->direction=90.0f;
+				if(down==1) block->direction=0.0f;
+				if(right==1) block->direction=-90.0f;
+				if(block->parttype==PartType::mount)
 				{
 					Flagellum this_flagellum;
 					this_flagellum.baseblock_index=index;
 					for(int i=1;i<=8;i++)
 					{
-						Vector2 pos={(float)-i+position.x+block.rocate.x,0};
+						Vector2 pos={(float)-i+position.x+block->rocate.x,0};
 						this_flagellum.Flagellum_points.emplace_back(pos);
 					}
 					Flagella.push_back(this_flagellum);
 				}
+			}
+			if(is_illegal)
+			{
+				block=Blocks.erase(block);
+			}
+			else
+			{
+				++block;
 			}
 			index++;
 		}
@@ -594,15 +641,10 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 	}
 	for(auto& it:Livings)//遍历生物
 	{
-		if(it.need_to_found_center)//是否需要重新计算重心
+		if(it.need_to_rebuild)
 		{
-			it.need_to_found_center=false;
-			it.found_center();
-		}
-		if(it.need_to_update_tiles)
-		{
-			it.need_to_update_tiles=false;
-			it.update_tiles();
+			it.need_to_rebuild=false;
+			it.rebulildcell();
 		}
 		it.update(deltaT);
 		if(it.type==Type::player)
@@ -701,8 +743,7 @@ void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Cam
 						if(result.is_part)
 						{
 							Livings[0].Blocks.erase(Livings[0].Blocks.begin()+result.block_index);
-							Livings[0].found_center();
-							Livings[0].update_tiles();
+							Livings[0].rebulildcell();
 						}
 					}
 					else
@@ -729,8 +770,7 @@ void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Cam
 								Block block(Livings[0].id,UI1_grid,this_part.mass,this_part.hp,this_part.parttype,this_part.organelle);
 								Livings[0].Blocks.push_back(block);
 							}
-							Livings[0].found_center();
-							Livings[0].update_tiles();
+							Livings[0].rebulildcell();
 						}
 					}
 				}
