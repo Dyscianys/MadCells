@@ -28,7 +28,7 @@ enum class GameState
 };
 enum class Type
 {
-	player
+	player,chlorella
 };
 enum class PartType
 {
@@ -71,71 +71,152 @@ struct Block
 		parttype=ma;
 		organelle=o;
 	}
-	void Drawblock(Texture2D texture,Vector2 pos,float d,float blo_d,float organ_d)
+	void Drawlight(Texture2D texture,PartType parttype,Organelle organelle,Color lightcolor,Vector2 pos,float d,float blo_d,float organ_d)
 	{
-		Rectangle source;
-		Rectangle dest;
-		dest={pos.x,pos.y,32,32};
-		Vector2 origin={16,16};
 		switch(parttype)
 		{
-		case PartType::cy_0:
-			source={32,0,32,32};
-			break;
-		case PartType::cy_1:
-			source={64,0,32,32};
-			DrawTexturePro(texture,{0,128,32,96},{pos.x,pos.y,32,96},{16,112},d+blo_d,WHITE);
+			case PartType::cy_1:
+			DrawTexturePro(texture,{0,128,32,96},{pos.x,pos.y,32,96},{16,112},d+blo_d,lightcolor);
 			break;
 		case PartType::cy_2p:
-			source={96,0,32,32};
-			DrawTexturePro(texture,{0,128,32,96},{pos.x,pos.y,32,96},{16,112},d+blo_d,WHITE);
-			DrawTexturePro(texture,{0,128,32,96},{pos.x,pos.y,32,96},{16,112},d+blo_d+180,WHITE);
+			DrawTexturePro(texture,{0,128,32,96},{pos.x,pos.y,32,96},{16,112},d+blo_d,lightcolor);
+			DrawTexturePro(texture,{0,128,32,96},{pos.x,pos.y,32,96},{16,112},d+blo_d+180,lightcolor);
 			break;
 		case PartType::cy_2c:
-			source={128,0,32,32};
-			DrawTexturePro(texture,{32,128,128,128},{pos.x,pos.y,128,128},{16,112},d+blo_d-90,WHITE);
+			DrawTexturePro(texture,{32,128,128,128},{pos.x,pos.y,128,128},{16,112},d+blo_d-90,lightcolor);
 			break;
 		case PartType::cy_3:
-			source={160,0,32,32};
-			DrawTexturePro(texture,{160,128,128,224},{pos.x,pos.y,128,224},{16,112},d+blo_d-90,WHITE);
-			break;
-		case PartType::mount:
-			source={192,0,32,32};
-			break;
-		case PartType::cilium_left:
-			source={224,0,32,32};
-			break;
-		case PartType::cilium_right:
-			source={256,0,32,32};
+			DrawTexturePro(texture,{160,128,128,224},{pos.x,pos.y,128,224},{16,112},d+blo_d-90,lightcolor);
 			break;
 		default:
-			source={0,0,32,32};
+			break;
+		}
+		switch(organelle)
+		{
+		case Organelle::specialized_oral_groove:
+			DrawTexturePro(texture,{0,352,192,32},{pos.x,pos.y,600,96},{0,48},organ_d,{100,255,100,150});
+		default:
+			break;
+		}
+	}
+	void Drawblock(Texture2D texture,Type type,Vector2 pos,float d,float blo_d,float organ_d)
+	{
+		Rectangle source,organ_source;
+		Rectangle dest,organ_dest;
+		dest={pos.x,pos.y,32,32};
+		organ_dest={pos.x,pos.y,32,32};
+		Vector2 origin={16,16};
+		Color lightcolor;
+		bool have_organ=false;
+		bool freedire=false;
+		switch(type)
+		{
+		case Type::player:
+			lightcolor={0,255,0,50};
+			switch(parttype)
+			{
+			case PartType::cy_0:
+				source={32,0,32,32};
+				break;
+			case PartType::cy_1:
+				source={64,0,32,32};
+				break;
+			case PartType::cy_2p:
+				source={96,0,32,32};
+				break;
+			case PartType::cy_2c:
+				source={128,0,32,32};
+				break;
+			case PartType::cy_3:
+				source={160,0,32,32};
+				break;
+			case PartType::mount:
+				source={192,0,32,32};
+				break;
+			case PartType::cilium_left:
+				source={224,0,32,32};
+				break;
+			case PartType::cilium_right:
+				source={256,0,32,32};
+				break;
+			default:
+				source={0,0,32,32};
+				break;
+			}
+			if(organelle!=Organelle::none)
+			{
+				have_organ=true;
+				switch(organelle)
+				{
+				case Organelle::nucleus:
+					organ_source={32,32,32,32};
+					break;
+				case Organelle::mitochondrion:
+					organ_source={64,32,32,32};
+					break;
+				case Organelle::specialized_oral_groove:
+					organ_source={96,32,64,32};
+					organ_dest.width=64;
+					freedire=true;
+					break;
+				default:
+					organ_source={0,32,32,32};
+					break;
+				}
+			}
+			break;
+		case Type::chlorella:
+			lightcolor={255,255,0,50};
+			switch(parttype)
+			{
+			case PartType::cy_0:
+				source={288,0,32,32};
+				break;
+			case PartType::cy_1:
+				source={320,0,32,32};
+				break;
+			case PartType::cy_2p:
+				source={352,0,32,32};
+				break;
+			case PartType::cy_2c:
+				source={384,0,32,32};
+				break;
+			case PartType::cy_3:
+				source={416,0,32,32};
+				break;
+			default:
+				source={0,0,32,32};
+				break;
+			}
+			if(organelle!=Organelle::none)
+			{
+				have_organ=true;
+				switch(organelle)
+				{
+				case Organelle::nucleus:
+					organ_source={160,32,32,32};
+					break;
+				default:
+					organ_source={0,32,32,32};
+					break;
+				}
+			}
+		default:
 			break;
 		}
 		DrawTexturePro(texture,source,dest,origin,d+blo_d,WHITE);
-		if(organelle!=Organelle::none)
+		if(have_organ)
 		{
-			switch(organelle)
+			if(freedire)
 			{
-			case Organelle::nucleus:
-				source={32,32,32,32};
-				break;
-			case Organelle::mitochondrion:
-				source={64,32,32,32};
-				break;
-			case Organelle::specialized_oral_groove:
-				source={96,32,64,32};
-				dest.width=64;
-				DrawTexturePro(texture,{0,352,192,32},{pos.x,pos.y,600,96},{0,48},organ_d,{100,255,100,150});
-				DrawTexturePro(texture,source,dest,origin,organ_d,WHITE);
-				return;
-				break;
-			default:
-				source={0,32,32,32};
-				break;
+				DrawTexturePro(texture,organ_source,organ_dest,origin,organ_d,WHITE);
 			}
-			DrawTexturePro(texture,source,dest,origin,d+blo_d+organ_d,WHITE);
+			else
+			{
+				DrawTexturePro(texture,organ_source,organ_dest,origin,d+blo_d+organ_d,WHITE);
+			}
 		}
+		Drawlight(texture,parttype,organelle,lightcolor,pos,d,blo_d,organ_d);
 	}
 };
 
@@ -329,8 +410,6 @@ struct Cell
 		{
 			center+=it.local*it.mass;
 			sum_mass+=it.mass;
-			printf("center:(%.5f,%.5f)\n",center.x,center.y);
-			printf("sum_mass:%.5f\n",sum_mass);
 		}
 		center.x/=sum_mass;
 		center.y/=sum_mass;
@@ -358,8 +437,14 @@ struct Cell
 		return false;
 	}
 	bool need_to_rebuild=true;
+	bool BFS_isconnector(Block block)
+	{
+		int type=(int)block.parttype;
+		return (type>=1 && type<6);
+	}
 	void rebulildcell()
 	{
+		Flagella.clear();
 		int nucleusIndex=-1;
 		for(size_t i=0;i<Blocks.size();++i)
 			if(Blocks[i].organelle==Organelle::nucleus) {nucleusIndex=i;break;}
@@ -372,6 +457,7 @@ struct Cell
 		{
 			int idx=q.front();q.pop();
 			Vector2 pos=Blocks[idx].local;
+			if(!BFS_isconnector(Blocks[idx])) continue;
 			Vector2 dirs[4]={{0,-32},{0,32},{-32,0},{32,0}};
 			for(auto& d:dirs)
 			{
@@ -386,19 +472,18 @@ struct Cell
 				}
 			}
 		}
-		for (auto it = Blocks.begin(); it != Blocks.end(); ) {
-			int idx = it - Blocks.begin();
-			if (!connected[idx])
+		for(auto it=Blocks.begin();it!=Blocks.end();)
+		{
+			int idx=it-Blocks.begin();
+			if(!connected[idx])
 			{
-				it = Blocks.erase(it);
+				it=Blocks.erase(it);
 			}
 			else
 			{
 				++it;
 			}
 		}
-		found_center();
-		Flagella.clear();
 		int index=0;
 		for(auto block=Blocks.begin();block!=Blocks.end();)
 		{
@@ -456,6 +541,7 @@ struct Cell
 				if(right==1) block->direction=-90.0f;
 				if(block->parttype==PartType::mount)
 				{
+					printf("检查 mount: pos=(%.1f, %.1f), parttype=%d\n", block->local.x, block->local.y, (int)block->parttype);
 					Flagellum this_flagellum;
 					this_flagellum.baseblock_index=index;
 					for(int i=1;i<=8;i++)
@@ -476,6 +562,7 @@ struct Cell
 			}
 			index++;
 		}
+		found_center();
 	}
 	void force(Vector2 actionpoint,Vector2 f)
 	{
@@ -511,6 +598,7 @@ vector<Cell> Livings;
 struct Cellbuilder
 {
 	int nextID=0;
+	int playerID=-1;
 	void create(Type type,Vector2 pos,float dir)
 	{
 		Cell newCell;
@@ -521,13 +609,35 @@ struct Cellbuilder
 		switch(type)
 		{
 		case Type::player:
-			newCell.Blocks.emplace_back(0,Vector2{-1,0},1.5f,50.0f,PartType::cy_0,Organelle::nucleus);//cytosol细胞质，nucleus细胞核
-			newCell.Blocks.emplace_back(0,Vector2{0,0},1.1f,50.0f,PartType::cy_0,Organelle::mitochondrion);//mitochondrion线粒体
-			newCell.Blocks.emplace_back(0,Vector2{1,0},1.5f,50.0f,PartType::cy_0,Organelle::specialized_oral_groove);//“特化口沟”
-			newCell.Blocks.emplace_back(0,Vector2{-2,0},0.4f,30.0f,PartType::mount,Organelle::none);//鞭毛
-			newCell.Blocks.emplace_back(0,Vector2{0,-1},0.3f,20.0f,PartType::cilium_left,Organelle::none);//纤毛
-			newCell.Blocks.emplace_back(0,Vector2{0,1},0.3f,20.0f,PartType::cilium_right,Organelle::none);
+			playerID=newCell.id;
+			newCell.Blocks.emplace_back(newCell.id,Vector2{-1,0},1.5f,50.0f,PartType::cy_0,Organelle::nucleus);//cytosol细胞质，nucleus细胞核
+			newCell.Blocks.emplace_back(newCell.id,Vector2{0,0},1.1f,50.0f,PartType::cy_0,Organelle::mitochondrion);//mitochondrion线粒体
+			newCell.Blocks.emplace_back(newCell.id,Vector2{1,0},1.5f,50.0f,PartType::cy_0,Organelle::specialized_oral_groove);//“特化口沟”
+			newCell.Blocks.emplace_back(newCell.id,Vector2{-2,0},0.4f,30.0f,PartType::mount,Organelle::none);//鞭毛
+			newCell.Blocks.emplace_back(newCell.id,Vector2{0,-1},0.3f,20.0f,PartType::cilium_left,Organelle::none);//纤毛
+			newCell.Blocks.emplace_back(newCell.id,Vector2{0,1},0.3f,20.0f,PartType::cilium_right,Organelle::none);
 			break;
+		case Type::chlorella:
+		{
+			int sizeclass=1;
+			switch(sizeclass)
+			{
+			case 1:
+				newCell.Blocks.emplace_back(newCell.id,Vector2{0,0},1.5f,30.0f,PartType::cy_0,Organelle::nucleus);
+				newCell.Blocks.emplace_back(newCell.id,Vector2{-1,0},1.0f,30.0f,PartType::cy_0,Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id,Vector2{1,0},1.0f,30.0f,PartType::cy_0,Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id,Vector2{0,-1},1.0f,30.0f,PartType::cy_0,Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id,Vector2{0,1},1.0f,30.0f,PartType::cy_0,Organelle::none);
+				break;
+			case 2:
+				break;
+			case 3:
+				break;
+			default:
+				break;
+			}
+			break;
+		}
 		default:
 			return;
 			break;
@@ -737,13 +847,13 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 		}
 	}
 }
-void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Vector2& UI1_grid)
+void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Cellbuilder builder,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Vector2& UI1_grid)
 {
 	mouseworldposition=GetScreenToWorld2D(GetMousePosition(),assemcamera);
 	assemcamera.target=Vector2Scale(mouseworldposition,0.2f);
 	ui1.update();
-	UI1_grid.x=(int)roundf(((mouseworldposition.x+Livings[0].center.x)/32.0f));
-	UI1_grid.y=(int)roundf(((mouseworldposition.y+Livings[0].center.y)/32.0f));
+	UI1_grid.x=(int)roundf(((mouseworldposition.x+Livings[builder.playerID].center.x)/32.0f));
+	UI1_grid.y=(int)roundf(((mouseworldposition.y+Livings[builder.playerID].center.y)/32.0f));
 	if(!zooming)
 	{
 		if(ui1.position.x>0.0f) ui1.fold=false;
@@ -766,47 +876,47 @@ void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Cam
 				{
 					if(this_part.parttype==PartType::none)
 					{
-						result=Livings[0].Find_block_localposition(UI1_grid*32);
+						result=Livings[builder.playerID].Find_block_localposition(UI1_grid*32);
 						if(result.is_part)
 						{
-							Livings[0].Blocks.erase(Livings[0].Blocks.begin()+result.block_index);
-							Livings[0].rebulildcell();
+							Livings[builder.playerID].Blocks.erase(Livings[builder.playerID].Blocks.begin()+result.block_index);
+							Livings[builder.playerID].rebulildcell();
 						}
 					}
 					else
 					{
 						int sum=0;
-						result=Livings[0].Find_block_localposition({(UI1_grid.x+1)*32,(UI1_grid.y+0)*32});
+						result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x+1)*32,(UI1_grid.y+0)*32});
 						sum+=result.is_cytosol;
-						result=Livings[0].Find_block_localposition({(UI1_grid.x-1)*32,(UI1_grid.y+0)*32});
+						result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x-1)*32,(UI1_grid.y+0)*32});
 						sum+=result.is_cytosol;
-						result=Livings[0].Find_block_localposition({(UI1_grid.x+0)*32,(UI1_grid.y+1)*32});
+						result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x+0)*32,(UI1_grid.y+1)*32});
 						sum+=result.is_cytosol;
-						result=Livings[0].Find_block_localposition({(UI1_grid.x+0)*32,(UI1_grid.y-1)*32});
+						result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x+0)*32,(UI1_grid.y-1)*32});
 						sum+=result.is_cytosol;
 						if(sum>0)
 						{
-							result=Livings[0].Find_block_localposition({(UI1_grid.x)*32,(UI1_grid.y)*32});
+							result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x)*32,(UI1_grid.y)*32});
 							if(result.is_part)
 							{
-								Livings[0].Blocks[result.block_index].parttype=this_part.parttype;
-								Livings[0].Blocks[result.block_index].organelle=Organelle::none;
+								Livings[builder.playerID].Blocks[result.block_index].parttype=this_part.parttype;
+								Livings[builder.playerID].Blocks[result.block_index].organelle=Organelle::none;
 							}
 							else
 							{
-								Block block(Livings[0].id,UI1_grid,this_part.mass,this_part.hp,this_part.parttype,this_part.organelle);
-								Livings[0].Blocks.push_back(block);
+								Block block(Livings[builder.playerID].id,UI1_grid,this_part.mass,this_part.hp,this_part.parttype,this_part.organelle);
+								Livings[builder.playerID].Blocks.push_back(block);
 							}
-							Livings[0].rebulildcell();
+							Livings[builder.playerID].rebulildcell();
 						}
 					}
 				}
 				else
 				{
-					result=Livings[0].Find_block_localposition({UI1_grid.x*32,UI1_grid.y*32});
+					result=Livings[builder.playerID].Find_block_localposition({UI1_grid.x*32,UI1_grid.y*32});
 					if(result.is_cytosol)
 					{
-						Livings[0].Blocks[result.block_index].organelle=this_part.organelle;
+						Livings[builder.playerID].Blocks[result.block_index].organelle=this_part.organelle;
 					}
 				}
 			}
@@ -866,7 +976,7 @@ void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Cam
 	}
 }
 
-void DrawGaming(Texture2D texture_all_parts,Texture2D background,Camera2D gamecamera)
+void DrawGaming(Texture2D texture_all_parts,Texture2D background,Camera2D gamecamera,Cellbuilder builder)
 {
 	DrawTexturePro(background,{0,0,1600,900},{0,0,SCREEN_WIDTH,SCREEN_HEIGHT},{0,0},0.0f,WHITE);
 	BeginMode2D(gamecamera);
@@ -894,7 +1004,7 @@ void DrawGaming(Texture2D texture_all_parts,Texture2D background,Camera2D gameca
 	{
 		for(auto& block:it.Blocks)
 		{
-			block.Drawblock(texture_all_parts,it.position+block.rocate,it.direction,block.direction,block.organelle_direction);
+			block.Drawblock(texture_all_parts,it.type,it.position+block.rocate,it.direction,block.direction,block.organelle_direction);
 		}
 		for(const auto& this_flagellum:it.Flagella)
 		{
@@ -928,7 +1038,7 @@ void DrawGaming(Texture2D texture_all_parts,Texture2D background,Camera2D gameca
 	}
 	EndMode2D();
 }
-void DrawAssembling(Texture2D texture_all_parts,Texture2D texture_ui,Camera2D assemcamera,UI ui1,Vector2 UI1_grid,Font font,vector<Part>&Partlibrary)
+void DrawAssembling(Texture2D texture_all_parts,Texture2D texture_ui,Camera2D assemcamera,Cellbuilder builder,UI ui1,Vector2 UI1_grid,Font font,vector<Part>&Partlibrary)
 {
 	ClearBackground(BLACK);
 	ui1.draw(texture_ui,font,"零件库");
@@ -940,13 +1050,13 @@ void DrawAssembling(Texture2D texture_all_parts,Texture2D texture_ui,Camera2D as
 		}
 	}
 	BeginMode2D(assemcamera);
-	for(auto& block:Livings[0].Blocks)
+	for(auto& block:Livings[builder.playerID].Blocks)
 	{
-		block.Drawblock(texture_all_parts,block.local-Livings[0].center,0.0f,block.direction,0.0f);
+		block.Drawblock(texture_all_parts,Type::player,block.local-Livings[builder.playerID].center,0.0f,block.direction,0.0f);
 	}
 	if(ui1.active)
 	{
-		DrawTexturePro(texture_ui,{284,44,34,34},{UI1_grid.x*32.0f-Livings[0].center.x,UI1_grid.y*32.0f-Livings[0].center.y,34,34},{17,17},0.0f,WHITE);
+		DrawTexturePro(texture_ui,{284,44,34,34},{UI1_grid.x*32.0f-Livings[builder.playerID].center.x,UI1_grid.y*32.0f-Livings[builder.playerID].center.y,34,34},{17,17},0.0f,WHITE);
 	}
 	EndMode2D();
 }
@@ -980,6 +1090,7 @@ int main()
 	
 	Cellbuilder builder;
 	builder.create(Type::player,Vector2{0,0},0.0f);
+	builder.create(Type::chlorella,Vector2{300,0},0.0f);
 	
 	for(int i=0;i<MAX_BULLETS;i++)
 	{
@@ -1021,7 +1132,7 @@ int main()
 		}
 		case GameState::ASSEMBLING:
 		{
-			UpdateAssembling(deltaT,interface,gamecamera,assemcamera,mouseworldposition,zooming,Partlibrary,ui1,UI1_grid);
+			UpdateAssembling(deltaT,interface,gamecamera,assemcamera,builder,mouseworldposition,zooming,Partlibrary,ui1,UI1_grid);
 			break;
 		}
 		default:break;
@@ -1031,12 +1142,12 @@ int main()
 		{
 		case GameState::GAMING:
 		{
-			DrawGaming(texture_all_parts,background,gamecamera);
+			DrawGaming(texture_all_parts,background,gamecamera,builder);
 			break;
 		}
 		case GameState::ASSEMBLING:
 		{
-			DrawAssembling(texture_all_parts,texture_ui,assemcamera,ui1,UI1_grid,font,Partlibrary);
+			DrawAssembling(texture_all_parts,texture_ui,assemcamera,builder,ui1,UI1_grid,font,Partlibrary);
 			break;
 		}
 		default:break;
