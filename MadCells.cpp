@@ -508,6 +508,33 @@ struct Cell
 };
 vector<Cell> Livings;
 
+struct Cellbuilder
+{
+	int nextID=0;
+	void create(Type type,Vector2 pos,float dir)
+	{
+		Cell newCell;
+		newCell.id=nextID++;
+		newCell.position=pos;
+		newCell.direction=dir;
+		newCell.type=type;
+		switch(type)
+		{
+		case Type::player:
+			newCell.Blocks.emplace_back(0,Vector2{-1,0},1.5f,50.0f,PartType::cy_0,Organelle::nucleus);//cytosol细胞质，nucleus细胞核
+			newCell.Blocks.emplace_back(0,Vector2{0,0},1.1f,50.0f,PartType::cy_0,Organelle::mitochondrion);//mitochondrion线粒体
+			newCell.Blocks.emplace_back(0,Vector2{1,0},1.5f,50.0f,PartType::cy_0,Organelle::specialized_oral_groove);//“特化口沟”
+			newCell.Blocks.emplace_back(0,Vector2{-2,0},0.4f,30.0f,PartType::mount,Organelle::none);//鞭毛
+			newCell.Blocks.emplace_back(0,Vector2{0,-1},0.3f,20.0f,PartType::cilium_left,Organelle::none);//纤毛
+			newCell.Blocks.emplace_back(0,Vector2{0,1},0.3f,20.0f,PartType::cilium_right,Organelle::none);
+			break;
+		default:
+			return;
+			break;
+		}
+		Livings.push_back(newCell);
+	}
+};
 struct UI
 {
 	Vector2 position={0,0},moveto;
@@ -951,18 +978,8 @@ int main()
 	Texture2D texture_all_parts=LoadTexture("asset/parts.png");
 	Texture2D texture_ui=LoadTexture("asset/ui.png");
 	
-	Cell player;
-	player.id=0;
-	player.type=Type::player;
-	player.position={0.0f,0.0f};
-	player.direction=0.0f;
-	player.Blocks.emplace_back(0,Vector2{-1,0},1.5f,50.0f,PartType::cy_0,Organelle::nucleus);//cytosol细胞质，nucleus细胞核
-	player.Blocks.emplace_back(0,Vector2{0,0},1.1f,50.0f,PartType::cy_0,Organelle::mitochondrion);//mitochondrion线粒体
-	player.Blocks.emplace_back(0,Vector2{1,0},1.5f,50.0f,PartType::cy_0,Organelle::specialized_oral_groove);//“特化口沟”
-	player.Blocks.emplace_back(0,Vector2{-2,0},0.4f,30.0f,PartType::mount,Organelle::none);//鞭毛
-	player.Blocks.emplace_back(0,Vector2{0,-1},0.3f,20.0f,PartType::cilium_left,Organelle::none);//纤毛
-	player.Blocks.emplace_back(0,Vector2{0,1},0.3f,20.0f,PartType::cilium_right,Organelle::none);
-	Livings.push_back(player);
+	Cellbuilder builder;
+	builder.create(Type::player,Vector2{0,0},0.0f);
 	
 	for(int i=0;i<MAX_BULLETS;i++)
 	{
