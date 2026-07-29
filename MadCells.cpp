@@ -34,7 +34,8 @@ enum class PartType
 {
 	none,cy_0,cy_1,cy_2c,cy_2p,cy_3,//cy->cytosol细胞质
 	mount,//鞭毛
-	cilium_left,cilium_right//纤毛
+	cilium_left,cilium_right,//纤毛
+	spike//刺细胞
 };
 enum class Organelle
 {
@@ -46,7 +47,7 @@ enum class Blockstate
 };
 enum class Bullettype
 {
-	foodvacuole
+	foodvacuole,spike
 };
 
 struct Block
@@ -184,6 +185,9 @@ struct Block
 			case PartType::cy_3:
 				source={416,0,32,32};
 				break;
+			case PartType::spike:
+				source={448,0,32,32};
+				break;
 			default:
 				source={0,0,32,32};
 				break;
@@ -251,8 +255,10 @@ struct BulletPool
 {
 	Bullet Bullets[MAX_BULLETS];
 	int count=0;
-	void fire(Bullettype type,int belongto_living_index,Vector2 pos,float direction)
+	void fire(Bullettype type,int belongto_living_index,Vector2 pos,float direction,Vector2& shake)
 	{
+		shake.x+=RandomFloat(-20.0f,20.0f);
+		shake.y+=RandomFloat(-20.0f,20.0f);
 		int index=-1;
 		int oldest_index;
 		float oldest_lifetime=1e6,v;
@@ -278,6 +284,10 @@ struct BulletPool
 			Bullets[index].lifetime=10.0f;
 			v=50.0f;
 			break;
+		case Bullettype::spike:
+			Bullets[index].damage=5.0f;
+			Bullets[index].lifetime=5.0f;
+			v=50.0f;
 		default:
 			return;
 		}
@@ -327,13 +337,11 @@ struct Cell
 		vd*=0.9;
 		position=position+velocity;
 		direction+=vd;
-		mass=0.0f;
 		float rad=DEG2RAD*direction;
 		sind=sinf(rad);
 		cosd=cosf(rad);
 		for(auto& block:Blocks)
 		{
-			mass+=block.mass;
 			block.rocate.x=(block.local.x-center.x)*cosd-(block.local.y-center.y)*sind;
 			block.rocate.y=(block.local.x-center.x)*sind+(block.local.y-center.y)*cosd;
 			if(block.timer>0.0f) block.timer-=deltaT;
@@ -362,6 +370,13 @@ struct Cell
 						rad=sum_d*DEG2RAD;
 						force(block.rocate,{cosf(rad)*80*deltaT,sinf(rad)*80*deltaT});
 						break;
+					case PartType::spike:
+						if(block.timer<=0.0f)
+						{
+							Bullet_pool.fire(Bullettype::spike,id,position+block.rocate,block.direction,shake);
+							block.timer=2.0f+RandomFloat(0.0f,1.0f);
+						}
+						break;
 					default:
 						break;
 					}
@@ -370,11 +385,9 @@ struct Cell
 				case Organelle::specialized_oral_groove:
 					if(block.timer<=0)
 					{
-						Bullet_pool.fire(Bullettype::foodvacuole,id,{position.x+block.rocate.x,position.y+block.rocate.y},block.organelle_direction);
+						Bullet_pool.fire(Bullettype::foodvacuole,id,position+block.rocate,block.organelle_direction,shake);
 						float rad=DEG2RAD*block.organelle_direction;
 						force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
-						shake.x+=RandomFloat(-20.0f,20.0f);
-						shake.y+=RandomFloat(-20.0f,20.0f);
 						block.timer=0.2f;
 					}
 				default:
@@ -406,8 +419,10 @@ struct Cell
 		float sum_mass=0.0f;
 		Vector2 center0=center;
 		center={0.0f,0.0f};
+		mass=0.0f;
 		for(const auto& it:Blocks)
 		{
+			mass+=it.mass;
 			center+=it.local*it.mass;
 			sum_mass+=it.mass;
 		}
@@ -533,7 +548,7 @@ struct Cell
 					block->direction=0.0f;
 				}
 			}
-			if(self_m>=6 && self_m<9)
+			if(self_m>=6 && self_m<10)
 			{
 				if(up==1) block->direction=180.0f;
 				if(left==1) block->direction=90.0f;
@@ -541,7 +556,6 @@ struct Cell
 				if(right==1) block->direction=-90.0f;
 				if(block->parttype==PartType::mount)
 				{
-					printf("检查 mount: pos=(%.1f, %.1f), parttype=%d\n", block->local.x, block->local.y, (int)block->parttype);
 					Flagellum this_flagellum;
 					this_flagellum.baseblock_index=index;
 					for(int i=1;i<=8;i++)
@@ -635,6 +649,31 @@ struct Cellbuilder
 				break;
 			default:
 				break;
+			}
+			float spikechance=0.3f;//随机生成刺细胞
+			Vector2 dirs[4]={{0,-32},{0,32},{-32,0},{32,0}};
+			for(const auto& block:newCell.Blocks)
+			{
+				int type=(int)block.parttype;
+				if(!(type>=1 && type<6)) continue;
+				for(const auto& d:dirs)
+				{
+					Vector2 checkpos=block.local+d;
+					bool occupied=false;
+					for(const auto& existing:newCell.Blocks)
+					{
+						if(existing.local==checkpos)
+						{
+							occupied=true;
+							break;
+						}
+					}
+					if(!occupied && RandomFloat(0.0f,1.0f)<spikechance)
+					{
+						Vector2 gridpos={checkpos.x/32,checkpos.y/32};
+						newCell.Blocks.emplace_back(newCell.id,gridpos,0.8f,20.0f,PartType::spike,Organelle::none);
+					}
+				}
 			}
 			break;
 		}
@@ -784,7 +823,9 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 			it.rebulildcell();
 		}
 		it.update(deltaT);
-		if(it.type==Type::player)
+		switch(it.type)
+		{
+		case Type::player:
 		{
 			for(auto& block:it.Blocks)
 			{
@@ -844,6 +885,21 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 					break;
 				}
 			}
+			break;
+		}
+		case Type::chlorella:
+		{
+			for(auto& block:it.Blocks)
+			{
+				if(block.parttype==PartType::spike)
+				{
+					block.state=Blockstate::active;
+				}
+			}
+			break;
+		}
+		default:
+			break;
 		}
 	}
 }
@@ -1025,6 +1081,10 @@ void DrawGaming(Texture2D texture_all_parts,Texture2D background,Camera2D gameca
 			case Bullettype::foodvacuole:
 				source={32,96,160,32};
 				dest.width=160;
+				break;
+			case Bullettype::spike:
+				source={160,96,96,32};
+				dest.width=96;
 				break;
 			default:
 				source={0,96,32,32};
