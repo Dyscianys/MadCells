@@ -49,17 +49,117 @@ enum class Bullettype
 {
 	foodvacuole,spike
 };
+enum class Particletype
+{
+	bubble,hit
+};
+
+struct Particle
+{
+	Particletype type;
+	Vector2 position;
+	Vector2 velocity;
+	float direction;
+	float size;
+	float maxsize;
+	Rectangle source;
+	Color color1,color2;
+	float lifetime=0.0f;
+	float timer=0.0f;
+	Vector2 pos2;
+	void update(float deltaT)
+	{
+		lifetime-=deltaT;
+		switch(type)
+		{
+		case Particletype::bubble:
+			velocity*=0.93;
+			position+=velocity*deltaT;
+			size+=(maxsize-size)*0.1f;
+			break;
+		case Particletype::hit:
+			velocity*=0.95;
+			position+=velocity*deltaT;
+			size+=(0-size)*0.15f;
+			break;
+		default:
+			break;
+		}
+	}
+	void draw()
+	{
+		switch(type)
+		{
+		case Particletype::bubble:
+		{
+			float radius=size/2.0f;
+			DrawCircleV(position,radius,color2);
+			DrawRing(position,radius,radius+3.0f,0,360,24,color1);
+			Vector2 highlight=position-Vector2{radius*0.6f,radius*0.6f};
+			DrawCircleV(highlight,3.0f,{255,255,255,50});
+			break;
+		}
+		case Particletype::hit:
+		{
+			Rectangle rect={position.x,position.y-4,size,8};
+			DrawRectanglePro(rect,{0,0},direction,color1);
+			break;
+		}
+		default:
+			break;
+		}
+	}
+};
+
+struct Particlemaster
+{
+	vector<Particle> Particles;
+	void createparticle(Particletype type,Vector2 pos,Vector2 vel,float dir,int num)
+	{
+		for(int i=0;i<num;i++)
+		{
+			Particle newParticle;
+			newParticle.type=type;
+			newParticle.position=pos;
+			switch(type)
+			{
+			case Particletype::bubble:
+				newParticle.velocity.x=vel.x*RandomFloat(0.2f,1.8f);
+				newParticle.velocity.y=vel.y*RandomFloat(0.2f,1.8f);
+				newParticle.size=0.0f;
+				newParticle.maxsize=RandomFloat(5.0f,80.0f);
+				newParticle.lifetime=RandomFloat(3.0f,5.0f);
+				newParticle.color1={255,255,255,70};
+				newParticle.color2={255,255,255,20};
+				break;
+			case Particletype::hit:
+				newParticle.size=RandomFloat(60.0f,100.0f);
+				newParticle.direction=dir+180+RandomFloat(-60.0f,60.0f);
+				newParticle.velocity.x=cosf(newParticle.direction*DEG2RAD)*300;
+				newParticle.velocity.y=sinf(newParticle.direction*DEG2RAD)*300;
+				newParticle.lifetime=2.0f;
+				newParticle.color1={255,255,0,255};
+				break;
+			default:
+				break;
+			}
+			Particles.push_back(newParticle);
+		}
+	}
+};
+Particlemaster Particle_master;
 
 struct Block
 {
 	int belongto_cell_ID;
 	Vector2 local={0.0f,0.0f};
 	Vector2 rocate={0.0f,0.0f};
-	float mass;
+	float mass=1.0f;
 	float direction=0.0f;
 	float organelle_direction=0.0f;
 	float hp;
 	float timer=0.0f;
+	float hittimer=0.0f;
 	PartType parttype;
 	Organelle organelle;
 	Blockstate state=Blockstate::none;
@@ -221,6 +321,10 @@ struct Block
 			}
 		}
 		Drawlight(texture,parttype,organelle,lightcolor,pos,d,blo_d,organ_d);
+		if(hittimer>0.0f)
+		{
+			DrawRectanglePro({pos.x,pos.y,32,32},{16,16},d,{255,255,255,200});
+		}
 	}
 };
 
@@ -349,6 +453,7 @@ struct Cell
 			block.rocate.x=(block.local.x-center.x)*cosd-(block.local.y-center.y)*sind;
 			block.rocate.y=(block.local.x-center.x)*sind+(block.local.y-center.y)*cosd;
 			if(block.timer>0.0f) block.timer-=deltaT;
+			if(block.hittimer>0.0f) block.hittimer-=deltaT;
 			if(block.state==Blockstate::active)
 			{
 				switch(block.organelle)
@@ -362,7 +467,7 @@ struct Cell
 					case PartType::mount:
 						sum_d+=90;
 						rad=sum_d*DEG2RAD;
-						force(block.rocate,{cosf(rad)*150*deltaT,sinf(rad)*150*deltaT});
+						force(block.rocate,{cosf(rad)*180*deltaT,sinf(rad)*180*deltaT});
 						break;
 					case PartType::cilium_left:
 						sum_d+=0;
@@ -377,9 +482,10 @@ struct Cell
 					case PartType::spike:
 						if(block.timer<=0.0f)
 						{
-							//Bullet_pool.fire(Bullettype::spike,id,position+block.rocate,direction+block.direction-90,shake);
+							Bullet_pool.fire(Bullettype::spike,id,position+block.rocate,direction+block.direction-90,shake);
 							float rad=DEG2RAD*(direction+block.direction-90);
 							force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
+							Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},RandomInt(2,5),0);
 							block.timer=2.0f+RandomFloat(0.0f,1.0f);
 						}
 						break;
@@ -394,6 +500,7 @@ struct Cell
 						Bullet_pool.fire(Bullettype::foodvacuole,id,position+block.rocate,block.organelle_direction,shake);
 						float rad=DEG2RAD*block.organelle_direction;
 						force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
+						Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},RandomInt(2,5),0);
 						block.timer=0.2f;
 					}
 				default:
@@ -583,6 +690,21 @@ struct Cell
 			index++;
 		}
 		found_center();
+	}
+	void delete_dead()
+	{
+		for(auto block=Blocks.begin();block!=Blocks.end();)
+		{
+			if(block->hp<=0.0f)
+			{
+				block=Blocks.erase(block);
+				need_to_rebuild=true;
+			}
+			else
+			{
+				block++;
+			}
+		}
 	}
 	void force(Vector2 actionpoint,Vector2 f)
 	{
@@ -787,6 +909,7 @@ struct Part
 	}
 };
 
+
 float point_to_point(float x1,float y1,float x2,float y2)
 {
 	return RAD2DEG*atan2f(y2-y1,x2-x1);
@@ -819,6 +942,29 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 			}
 			Bullet_pool.Bullets[i].position.x+=Bullet_pool.Bullets[i].velocity.x;
 			Bullet_pool.Bullets[i].position.y+=Bullet_pool.Bullets[i].velocity.y;
+			for(auto& enemy:Livings)
+			{
+				if(enemy.id==Bullet_pool.Bullets[i].belongto_living_index) continue;
+				for(auto& block:enemy.Blocks)
+				{
+					Vector2 xydist=Bullet_pool.Bullets[i].position-(enemy.position+block.rocate);
+					if(!(fabs(xydist.x)<25.0f && fabs(xydist.y)<25.0f)) continue;
+					float rad=DEG2RAD*-(enemy.direction+block.direction);
+					Vector2 rocateback;
+					rocateback.x=cosf(rad)*xydist.x-sinf(rad)*xydist.y;
+					rocateback.y=sinf(rad)*xydist.x+cosf(rad)*xydist.y;
+					if(!(fabs(rocateback.x)<16.0f && fabs(rocateback.y)<16.0f)) continue;
+					block.hp-=Bullet_pool.Bullets[i].damage;
+					enemy.force({block.rocate.x,block.rocate.y},Vector2Normalize(Bullet_pool.Bullets[i].velocity)*50.0f);
+					shake.x+=RandomFloat(-15.0f,15.0f);
+					shake.y+=RandomFloat(-15.0f,15.0f);
+					Particle_master.createparticle(Particletype::hit,enemy.position+block.rocate,Bullet_pool.Bullets[i].velocity,Bullet_pool.Bullets[i].direction,3);
+					block.hittimer=0.1f;
+					Bullet_pool.Bullets[i].is_active=false;
+					if(!Bullet_pool.Bullets[i].is_active) break;
+				}
+				if(!Bullet_pool.Bullets[i].is_active) break;
+			}
 		}
 	}
 	for(auto& it:Livings)//遍历生物
@@ -829,6 +975,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 			it.rebulildcell();
 		}
 		it.update(deltaT);
+		it.delete_dead();
 		switch(it.type)
 		{
 		case Type::player:
@@ -907,6 +1054,21 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 		default:
 			break;
 		}
+	}
+	for(auto it=Particle_master.Particles.begin();it!=Particle_master.Particles.end();)
+	{
+		if(it->lifetime<0.0f)
+		{
+			it=Particle_master.Particles.erase(it);
+		}
+		else
+		{
+			++it;
+		}
+	}
+	for(auto& it:Particle_master.Particles)
+	{
+		it.update(deltaT);
 	}
 }
 void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Cellbuilder builder,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Vector2& UI1_grid)
@@ -1106,8 +1268,13 @@ void DrawGaming(Texture2D texture_all_parts,Texture2D background,Camera2D gameca
 			DrawTexturePro(texture_all_parts,source,dest,origin,Bullet_pool.Bullets[i].direction,WHITE);
 		}
 	}
+	for(auto& it:Particle_master.Particles)
+	{
+		it.draw();
+	}
 	EndMode2D();
 }
+
 void DrawAssembling(Texture2D texture_all_parts,Texture2D texture_ui,Camera2D assemcamera,Cellbuilder builder,UI ui1,Vector2 UI1_grid,Font font,vector<Part>&Partlibrary)
 {
 	ClearBackground(BLACK);
