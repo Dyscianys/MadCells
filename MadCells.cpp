@@ -249,6 +249,7 @@ struct Bullet
 	bool is_active=false;
 	Bullettype type;
 	int belongto_living_index;
+	Color lightcolor={255,255,255,255};
 };
 
 struct BulletPool
@@ -283,11 +284,14 @@ struct BulletPool
 			Bullets[index].damage=5.0f;
 			Bullets[index].lifetime=10.0f;
 			v=50.0f;
+			Bullets[index].lightcolor={0,255,0,100};
 			break;
 		case Bullettype::spike:
 			Bullets[index].damage=5.0f;
 			Bullets[index].lifetime=5.0f;
 			v=50.0f;
+			Bullets[index].lightcolor={255,0,0,100};
+			break;
 		default:
 			return;
 		}
@@ -373,7 +377,9 @@ struct Cell
 					case PartType::spike:
 						if(block.timer<=0.0f)
 						{
-							Bullet_pool.fire(Bullettype::spike,id,position+block.rocate,block.direction,shake);
+							//Bullet_pool.fire(Bullettype::spike,id,position+block.rocate,direction+block.direction-90,shake);
+							float rad=DEG2RAD*(direction+block.direction-90);
+							force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
 							block.timer=2.0f+RandomFloat(0.0f,1.0f);
 						}
 						break;
@@ -1072,28 +1078,32 @@ void DrawGaming(Texture2D texture_all_parts,Texture2D background,Camera2D gameca
 	}
 	for(int i=0;i<MAX_BULLETS;i++)
 	{
+		
 		if(Bullet_pool.Bullets[i].is_active)
 		{
 			Rectangle source;
 			Rectangle dest={Bullet_pool.Bullets[i].position.x,Bullet_pool.Bullets[i].position.y,0,32};
+			Rectangle lightdest={dest.x,dest.y,256,256};
+			Vector2 origin={0,0};
 			switch(Bullet_pool.Bullets[i].type)
 			{
 			case Bullettype::foodvacuole:
-				source={32,96,160,32};
-				dest.width=160;
+				source={32,96,128,32};
+				dest.width=128;
+				origin={96,16};
 				break;
 			case Bullettype::spike:
 				source={160,96,96,32};
 				dest.width=96;
+				origin={64,16};
 				break;
 			default:
 				source={0,96,32,32};
 				dest.width=32;
 				break;
 			};
-			DrawTexturePro(texture_all_parts,source,dest,{96,16},Bullet_pool.Bullets[i].direction,WHITE);
-			dest.width=256;dest.height=256;
-			DrawTexturePro(texture_all_parts,{0,256,96,96},dest,{128,128},Bullet_pool.Bullets[i].direction,{0,255,0,100});
+			DrawTexturePro(texture_all_parts,{0,256,96,96},lightdest,{128,128},Bullet_pool.Bullets[i].direction,Bullet_pool.Bullets[i].lightcolor);
+			DrawTexturePro(texture_all_parts,source,dest,origin,Bullet_pool.Bullets[i].direction,WHITE);
 		}
 	}
 	EndMode2D();
