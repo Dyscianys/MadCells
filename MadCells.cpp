@@ -56,6 +56,52 @@ enum class Particletype
 	bubble,hit,geometricslime,deadring
 };
 
+struct Sound2D
+{
+	Sound alias;
+	bool active=false;
+	Sound* basesound=nullptr;
+};
+struct SoundPool
+{
+	vector<Sound2D> Sounds;
+	void init(Sound& base,int count)
+	{
+		for(int i=0;i<count;i++)
+		{
+			Sound2D newsound;
+			newsound.alias=LoadSoundAlias(base);
+			newsound.basesound=&base;
+			newsound.active=false;
+			Sounds.push_back(newsound);
+		}
+	}
+	bool play(Sound& base,float volume=1.0f)
+	{
+		for(auto& it:Sounds)
+		{
+			if(!it.active && it.basesound==&base)
+			{
+				SetSoundVolume(it.alias,min(volume,1.0f));
+				PlaySound(it.alias);
+				it.active=true;
+				return true;
+			}
+		}
+		return false;
+	}
+	void update()
+	{
+		for(auto& it:Sounds)
+		{
+			if(it.active && !IsSoundPlaying(it.alias))
+			{
+				it.active=false;
+			}
+		}
+	}
+};
+
 struct Particle
 {
 	Particletype type;
@@ -421,10 +467,10 @@ struct BulletPool
 	Bullet Bullets[MAX_BULLETS];
 	int substeps=5;
 	int count=0;
-	void fire(Bullettype type,int belongto_living_index,Vector2 pos,float direction,Vector2& shake)
+	void fire(Bullettype type,int belongto_living_index,Vector2 pos,float direction,Vector2& shake,float shakeclass)
 	{
-		shake.x+=RandomFloat(-20.0f,20.0f);
-		shake.y+=RandomFloat(-20.0f,20.0f);
+		shake.x+=RandomFloat(-shakeclass,shakeclass);
+		shake.y+=RandomFloat(-shakeclass,shakeclass);
 		int index=-1;
 		int oldest_index;
 		float oldest_lifetime=1e6,v;
@@ -502,7 +548,7 @@ struct Cell
 	Color color;
 	bool isdead=false;
 	
-	void update(float deltaT)
+	void update(float deltaT,Camera2D& gamecamera,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2)
 	{
 		velocity=velocity*0.9f;
 		vd*=0.9;
@@ -545,10 +591,12 @@ struct Cell
 					case PartType::spike:
 						if(block.timer<=0.0f)
 						{
-							Bullet_pool.fire(Bullettype::spike,id,position+block.rocate,direction+block.direction-90,shake);
+							float dist=Vector2Distance(position+block.rocate,gamecamera.target)/32.0f;
+							Bullet_pool.fire(Bullettype::spike,id,position+block.rocate,direction+block.direction-90,shake,min((15.0f/dist),1.0f)*30.0f);
 							float rad=DEG2RAD*(direction+block.direction-90);
 							force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
 							Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},0,Color{0,0,0,0},0,RandomInt(2,5));
+							Sound_pool.play(shoot2,15.0f/dist);
 							block.timer=2.0f+RandomFloat(0.0f,1.0f);
 						}
 						break;
@@ -560,10 +608,11 @@ struct Cell
 				case Organelle::specialized_oral_groove:
 					if(block.timer<=0)
 					{
-						Bullet_pool.fire(Bullettype::foodvacuole,id,position+block.rocate,block.organelle_direction,shake);
+						Bullet_pool.fire(Bullettype::foodvacuole,id,position+block.rocate,block.organelle_direction,shake,20.0f);
 						float rad=DEG2RAD*block.organelle_direction;
 						force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
 						Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},0,Color{0,0,0,0},0,RandomInt(2,5));
+						Sound_pool.play(shoot1,1.0f);
 						block.timer=0.2f;
 					}
 				default:
@@ -768,20 +817,17 @@ struct Cell
 		}
 		found_center();
 	}
-	void delete_dead()
+	void delete_dead(Camera2D& gamecamera,SoundPool& Sound_pool,Sound& broken2)
 	{
 		for(auto block=Blocks.begin();block!=Blocks.end();)
 		{
-			if (block->organelle == Organelle::nucleus) {
-				printf("细胞核: hp=%.1f, local=(%.1f,%.1f), rocate=(%.1f,%.1f), world=(%.1f,%.1f)\n",
-					   block->hp, block->local.x, block->local.y, block->rocate.x, block->rocate.y,
-					   position.x + block->rocate.x, position.y + block->rocate.y);
-			}
 			if(block->hp<=0.0f)
 			{
 				Particle_master.createparticle(Particletype::geometricslime,position+block->rocate,Vector2{-300,300},0,color,400,RandomInt(3,5));
 				Particle_master.createparticle(Particletype::deadring,position+block->rocate,Vector2{0,0},0,{255,255,255,200},400,1);
 				if(block->organelle==Organelle::nucleus) isdead=true;
+				float dist=Vector2Distance(position+block->rocate,gamecamera.target)/32.0f;
+				Sound_pool.play(broken2,15.0f/dist);
 				block=Blocks.erase(block);
 				need_to_rebuild=true;
 			}
@@ -1057,9 +1103,11 @@ int mod(int a,int b)
 	return (a%b+b)%b;
 }
 
-void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1)
+void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Music& bgm,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2,Sound& hit,Sound& broken1,Sound& broken2)
 {
 	mouseworldposition=GetScreenToWorld2D(GetMousePosition(),gamecamera);
+	UpdateMusicStream(bgm);
+	if(!IsMusicStreamPlaying(bgm)) PlayMusicStream(bgm);
 	if(IsKeyPressed(KEY_E)) 
 	{
 		zooming=true;
@@ -1102,6 +1150,8 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 						Particle_master.createparticle(Particletype::hit,enemy.position+block.rocate,Bullet_pool.Bullets[i].velocity,Bullet_pool.Bullets[i].direction,Color{0,0,0,0},0,3);
 						block.hittimer=0.1f;
 						if(block.organelle==Organelle::nucleus && block.hp<=0.0f) enemy.isdead=true;
+						float dist=Vector2Distance(Bullet_pool.Bullets[i].position,gamecamera.target)/32.0f;
+						Sound_pool.play(hit,5.0f/dist);
 						Bullet_pool.Bullets[i].is_active=false;
 						if(!Bullet_pool.Bullets[i].is_active) break;
 					}
@@ -1113,8 +1163,8 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 	}
 	for(auto& it:Livings)//遍历生物
 	{
-		it.update(deltaT);
-		it.delete_dead();
+		it.update(deltaT,gamecamera,Sound_pool,shoot1,shoot2);
+		it.delete_dead(gamecamera,Sound_pool,broken2);
 		if(it.need_to_rebuild)
 		{
 			it.need_to_rebuild=false;
@@ -1201,13 +1251,15 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 	}
 	for(auto it=Livings.begin();it!=Livings.end();)
 	{
-		printf("living %d : blocks = %d , isdead = %d\n",it->id,it->Blocks.size(),(int)it->isdead);
 		if(it->isdead || it->Blocks.empty())
 		{
 			Particle_master.createparticle(Particletype::geometricslime,it->position+it->center,Vector2{-1200,1200},0,it->color,1200,RandomInt(8,12));
 			Particle_master.createparticle(Particletype::deadring,it->position+it->center,Vector2{0,0},0,{255,255,255,200},1500,1);
-			shake.x+=RandomFloat(-100.0f,100.0f);
-			shake.y+=RandomFloat(-100.0f,100.0f);
+			float dist=Vector2Distance(it->position+it->center,gamecamera.target)/32.0f;
+			float shakeclass=150.0f*min(1.0f,15.0f/dist);
+			shake.x+=RandomFloat(-shakeclass,shakeclass);
+			shake.y+=RandomFloat(-shakeclass,shakeclass);
+			Sound_pool.play(broken1,20.0f/dist);
 			it=Livings.erase(it);
 		}
 		else
@@ -1230,6 +1282,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 	{
 		it.update(deltaT);
 	}
+	Sound_pool.update();
 }
 void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Cellbuilder builder,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Vector2& UI1_grid)
 {
@@ -1463,6 +1516,7 @@ void DrawAssembling(Texture2D texture_all_parts,Texture2D texture_ui,Camera2D as
 int main()
 {	
 	InitWindow(SCREEN_WIDTH,SCREEN_HEIGHT,"MadCells");
+	InitAudioDevice();
 	SetTargetFPS(60);
 	
 	GameState interface=GameState::GAMING;
@@ -1484,6 +1538,18 @@ int main()
 	Texture2D background=LoadTexture("asset/background.png");
 	Texture2D texture_all_parts=LoadTexture("asset/parts.png");
 	Texture2D texture_ui=LoadTexture("asset/ui.png");
+	Sound shoot1=LoadSound("asset/sound/shoot1.wav");
+	Sound shoot2=LoadSound("asset/sound/shoot2.wav");
+	Sound hit=LoadSound("asset/sound/hit.wav");
+	Sound broken1=LoadSound("asset/sound/broken1.wav");
+	Sound broken2=LoadSound("asset/sound/broken2.wav");
+	Music bgm=LoadMusicStream("asset/sound/face_down.mp3");
+	SoundPool Sound_pool;
+	Sound_pool.init(shoot1,5);
+	Sound_pool.init(shoot2,7);
+	Sound_pool.init(hit,7);
+	Sound_pool.init(broken1,3);
+	Sound_pool.init(broken2,5);
 	
 	Cellbuilder builder;
 	builder.create(Type::player,Vector2{0,0},0.0f);
@@ -1531,7 +1597,7 @@ int main()
 		{
 		case GameState::GAMING:
 		{
-			UpdateGaming(deltaT,interface,gamecamera,assemcamera,mouseworldposition,zooming,Partlibrary,ui1);
+			UpdateGaming(deltaT,interface,gamecamera,assemcamera,mouseworldposition,zooming,Partlibrary,ui1,bgm,Sound_pool,shoot1,shoot2,hit,broken1,broken2);
 			break;
 		}
 		case GameState::ASSEMBLING:
@@ -1559,10 +1625,17 @@ int main()
 		EndDrawing();
 	}
 	CloseWindow();
+	CloseAudioDevice();
 	
 	UnloadTexture(background);
 	UnloadTexture(texture_all_parts);
 	UnloadTexture(texture_ui);
+	UnloadSound(shoot1);
+	UnloadSound(shoot2);
+	UnloadSound(hit);
+	UnloadSound(broken1);
+	UnloadSound(broken2);
+	UnloadMusicStream(bgm);
 	
 	return 0;
 }
