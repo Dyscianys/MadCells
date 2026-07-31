@@ -10,6 +10,8 @@ using namespace std;
 const int MAX_BULLETS=200;
 const int SCREEN_WIDTH=2400;
 const int SCREEN_HEIGHT=1400;
+const int CONNECT_INDEX=7;
+const int BLOCK_ALLTYPE=11;
 
 std::random_device rd;//随机数用
 std::mt19937 rng(rd());
@@ -32,7 +34,7 @@ enum class Type
 };
 enum class PartType
 {
-	none,cy_0,cy_1,cy_2c,cy_2p,cy_3,//cy->cytosol细胞质
+	none,cy_0,cy_1,cy_2c,cy_2p,cy_3,cy_4,//cy->cytosol细胞质
 	mount,//鞭毛
 	cilium_left,cilium_right,//纤毛
 	spike//刺细胞
@@ -95,7 +97,7 @@ struct Particle
 		case Particletype::deadring:
 			size+=(maxsize-size)*0.1f;
 			size2+=(maxsize-size2)*0.03f;
-			if(maxsize-size2>=5.0f) lifetime=1e6;
+			if(maxsize-size2>=3.0f) lifetime=1e6;
 			else lifetime=-1.0f;
 			break;
 		default:
@@ -170,12 +172,12 @@ struct Particlemaster
 				newParticle.color1={255,255,0,255};
 				break;
 			case Particletype::geometricslime:
-				newParticle.velocity.x=RandomFloat(-300.0f,300.0f);
-				newParticle.velocity.y=RandomFloat(-300.0f,300.0f);
+				newParticle.velocity.x=RandomFloat(vel.x,vel.y);
+				newParticle.velocity.y=RandomFloat(vel.x,vel.y);
 				newParticle.vd=RandomFloat(-60.0f,60.0f);
 				newParticle.direction=RandomFloat(0.0f,360.0f);
 				newParticle.size=0.0f;
-				newParticle.maxsize=RandomFloat(50.0f,400.0f);
+				newParticle.maxsize=RandomFloat(50.0f,size);
 				if(RandomInt(1,3)>2) newParticle.color1=color;
 				else newParticle.color1={255,255,255,150};
 				newParticle.side=RandomInt(3,8);
@@ -237,6 +239,10 @@ struct Block
 		case PartType::cy_3:
 			DrawTexturePro(texture,{160,128,128,224},{pos.x,pos.y,128,224},{16,112},d+blo_d-90,lightcolor);
 			break;
+		case PartType::cy_4:
+			DrawTexturePro(texture,{160,128,128,224},{pos.x,pos.y,128,224},{16,112},d+blo_d-90,lightcolor);
+			DrawTexturePro(texture,{160,128,128,224},{pos.x,pos.y,128,224},{16,112},d+blo_d+90,lightcolor);
+			break;
 		default:
 			break;
 		}
@@ -279,14 +285,17 @@ struct Block
 			case PartType::cy_3:
 				source={160,0,32,32};
 				break;
-			case PartType::mount:
+			case PartType::cy_4:
 				source={192,0,32,32};
 				break;
-			case PartType::cilium_left:
+			case PartType::mount:
 				source={224,0,32,32};
 				break;
-			case PartType::cilium_right:
+			case PartType::cilium_left:
 				source={256,0,32,32};
+				break;
+			case PartType::cilium_right:
+				source={288,0,32,32};
 				break;
 			default:
 				source={0,0,32,32};
@@ -319,22 +328,24 @@ struct Block
 			switch(parttype)
 			{
 			case PartType::cy_0:
-				source={288,0,32,32};
-				break;
-			case PartType::cy_1:
 				source={320,0,32,32};
 				break;
-			case PartType::cy_2p:
+			case PartType::cy_1:
 				source={352,0,32,32};
 				break;
-			case PartType::cy_2c:
+			case PartType::cy_2p:
 				source={384,0,32,32};
 				break;
-			case PartType::cy_3:
+			case PartType::cy_2c:
 				source={416,0,32,32};
 				break;
-			case PartType::spike:
+			case PartType::cy_3:
 				source={448,0,32,32};
+				break;
+			case PartType::cy_4:
+				source={480,0,32,32};
+			case PartType::spike:
+				source={512,0,32,32};
 				break;
 			default:
 				source={0,0,32,32};
@@ -488,6 +499,7 @@ struct Cell
 	vector<Block> Blocks;
 	vector<Flagellum> Flagella;
 	Color color;
+	bool isdead=false;
 	
 	void update(float deltaT)
 	{
@@ -609,7 +621,7 @@ struct Cell
 			if(block.local.x==local.x && block.local.y==local.y)
 			{
 				int index=static_cast<int>(block.parttype);
-				return (index>=1 && index<6);
+				return (index>=1 && index<CONNECT_INDEX);
 			}
 		}
 		return false;
@@ -618,7 +630,7 @@ struct Cell
 	bool BFS_isconnector(Block block)
 	{
 		int type=(int)block.parttype;
-		return (type>=1 && type<6);
+		return (type>=1 && type<CONNECT_INDEX);
 	}
 	void rebulildcell()
 	{
@@ -673,12 +685,12 @@ struct Cell
 			right=Check_other_blocks({block->local.x+32,block->local.y});
 			
 			int tot=up+left+down+right;
-			if(tot==0)
+			if(tot==0 && block->organelle!=Organelle::nucleus)
 			{
 				is_illegal=true;
 			}
 			int self_m=static_cast<int>(block->parttype);
-			if(self_m>=1 && self_m<6)
+			if(self_m>=1 && self_m<CONNECT_INDEX)
 			{
 				if(tot==1)
 				{
@@ -711,7 +723,7 @@ struct Cell
 					block->direction=0.0f;
 				}
 			}
-			if(self_m>=6 && self_m<10)
+			if(self_m>=CONNECT_INDEX && self_m<BLOCK_ALLTYPE)
 			{
 				if(up==1) block->direction=180.0f;
 				if(left==1) block->direction=90.0f;
@@ -747,7 +759,7 @@ struct Cell
 		{
 			if(block->hp<=0.0f)
 			{
-				Particle_master.createparticle(Particletype::geometricslime,position+block->rocate,Vector2{0,0},0,color,0,RandomInt(3,5));
+				Particle_master.createparticle(Particletype::geometricslime,position+block->rocate,Vector2{-300,300},0,color,400,RandomInt(3,5));
 				Particle_master.createparticle(Particletype::deadring,position+block->rocate,Vector2{0,0},0,{255,255,255,200},400,1);
 				block=Blocks.erase(block);
 				need_to_rebuild=true;
@@ -773,7 +785,7 @@ struct Cell
 			if(block.local==local)
 			{
 				int parttype_id=static_cast<int>(block.parttype);
-				if(parttype_id>=1 && parttype_id<6)
+				if(parttype_id>=1 && parttype_id<CONNECT_INDEX)
 				{
 					return {true,true,index,block.organelle==Organelle::nucleus};
 				}
@@ -837,7 +849,7 @@ struct Cellbuilder
 			for(const auto& block:newCell.Blocks)
 			{
 				int type=(int)block.parttype;
-				if(!(type>=1 && type<6)) continue;
+				if(!(type>=1 && type<CONNECT_INDEX)) continue;
 				for(const auto& d:dirs)
 				{
 					Vector2 checkpos=block.local+d;
@@ -1014,10 +1026,11 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 						if(!(fabs(rocateback.x)<16.0f && fabs(rocateback.y)<16.0f)) continue;
 						block.hp-=Bullet_pool.Bullets[i].damage;
 						enemy.force({block.rocate.x,block.rocate.y},Vector2Normalize(Bullet_pool.Bullets[i].velocity)*50.0f);
-						shake.x+=RandomFloat(-15.0f,15.0f);
-						shake.y+=RandomFloat(-15.0f,15.0f);
+						shake.x+=RandomFloat(-30.0f,30.0f);
+						shake.y+=RandomFloat(-30.0f,30.0f);
 						Particle_master.createparticle(Particletype::hit,enemy.position+block.rocate,Bullet_pool.Bullets[i].velocity,Bullet_pool.Bullets[i].direction,Color{0,0,0,0},0,3);
 						block.hittimer=0.1f;
+						if(block.organelle==Organelle::nucleus && block.hp<=0.0f) enemy.isdead=true;
 						Bullet_pool.Bullets[i].is_active=false;
 						if(!Bullet_pool.Bullets[i].is_active) break;
 					}
@@ -1113,6 +1126,21 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 		}
 		default:
 			break;
+		}
+	}
+	for(auto it=Livings.begin();it!=Livings.end();)
+	{
+		if(it->isdead)
+		{
+			Particle_master.createparticle(Particletype::geometricslime,it->position+it->center,Vector2{-1200,1200},0,it->color,1200,RandomInt(8,12));
+			Particle_master.createparticle(Particletype::deadring,it->position+it->center,Vector2{0,0},0,{255,255,255,200},1500,1);
+			shake.x+=RandomFloat(-100.0f,100.0f);
+			shake.y+=RandomFloat(-100.0f,100.0f);
+			it=Livings.erase(it);
+		}
+		else
+		{
+			++it;
 		}
 	}
 	for(auto it=Particle_master.Particles.begin();it!=Particle_master.Particles.end();)
@@ -1409,9 +1437,9 @@ int main()
 	{
 		{0,"空",{0,0,32,32},0.0f,0.0f,PartType::none,Organelle::none,0.0f},
 		{1,"细胞质块",{128,0,32,32},1.0f,50.0f,PartType::cy_0,Organelle::none,0.1F},
-		{2,"鞭毛基底",{192,0,32,32},0.4F,30.0F,PartType::mount,Organelle::none,0.2F},
-		{3,"左纤毛",{224,0,32,32},0.3f,20.0f,PartType::cilium_left,Organelle::none,0.3f},
-		{4,"右纤毛",{256,0,32,32},0.2f,20.0f,PartType::cilium_right,Organelle::none,0.4f},
+		{2,"鞭毛基底",{224,0,32,32},0.4F,30.0F,PartType::mount,Organelle::none,0.2F},
+		{3,"左纤毛",{256,0,32,32},0.3f,20.0f,PartType::cilium_left,Organelle::none,0.3f},
+		{4,"右纤毛",{288,0,32,32},0.2f,20.0f,PartType::cilium_right,Organelle::none,0.4f},
 		{5,"细胞核",{32,32,32,32},0.5f,0.0f,PartType::none,Organelle::nucleus,0.5f},
 		{6,"线粒体",{64,32,32,32},0.1f,0.0f,PartType::none,Organelle::mitochondrion,0.6f},
 		{7,"特化口沟",{96,32,64,32},0.5f,0.0f,PartType::none,Organelle::specialized_oral_groove,0.7f},
