@@ -51,7 +51,7 @@ enum class Bullettype
 };
 enum class Particletype
 {
-	bubble,hit
+	bubble,hit,geometricslime,deadring
 };
 
 struct Particle
@@ -59,14 +59,16 @@ struct Particle
 	Particletype type;
 	Vector2 position;
 	Vector2 velocity;
-	float direction;
-	float size;
+	float vd=0.0f,direction=0.0f;
+	float size,size2;
 	float maxsize;
 	Rectangle source;
 	Color color1,color2;
 	float lifetime=0.0f;
 	float timer=0.0f;
 	Vector2 pos2;
+	int side;
+	float alpha;
 	void update(float deltaT)
 	{
 		lifetime-=deltaT;
@@ -74,17 +76,32 @@ struct Particle
 		{
 		case Particletype::bubble:
 			velocity*=0.93;
-			position+=velocity*deltaT;
 			size+=(maxsize-size)*0.1f;
 			break;
 		case Particletype::hit:
 			velocity*=0.95;
-			position+=velocity*deltaT;
 			size+=(0-size)*0.15f;
+			break;
+		case Particletype::geometricslime:
+			velocity*=0.98;
+			vd*=0.98f;
+			direction+=vd*deltaT;
+			size+=(maxsize-size)*0.04f;
+			alpha+=(0-alpha)*0.005f;
+			color1.a=alpha;
+			if(alpha>=5.0f) lifetime=1e6;
+			else lifetime=-1.0f;
+			break;
+		case Particletype::deadring:
+			size+=(maxsize-size)*0.1f;
+			size2+=(maxsize-size2)*0.03f;
+			if(maxsize-size2>=5.0f) lifetime=1e6;
+			else lifetime=-1.0f;
 			break;
 		default:
 			break;
 		}
+		position+=velocity*deltaT;
 	}
 	void draw()
 	{
@@ -105,6 +122,18 @@ struct Particle
 			DrawRectanglePro(rect,{0,0},direction,color1);
 			break;
 		}
+		case Particletype::geometricslime:
+		{
+			float radius=size/2.0f;
+			Color c=color1;
+			c.a*=1.3;
+			DrawPoly(position,side,radius,direction,color1);
+			DrawPolyLinesEx(position,side,radius,direction,3.0f,c);
+			break;
+		}
+		case Particletype::deadring:
+			DrawRing(position,(size/2.0f),(size2/2.0f),0,360,24,color1);
+			break;
 		default:
 			break;
 		}
@@ -114,7 +143,7 @@ struct Particle
 struct Particlemaster
 {
 	vector<Particle> Particles;
-	void createparticle(Particletype type,Vector2 pos,Vector2 vel,float dir,int num)
+	void createparticle(Particletype type,Vector2 pos,Vector2 vel,float dir,Color color,float size,int num)
 	{
 		for(int i=0;i<num;i++)
 		{
@@ -139,6 +168,25 @@ struct Particlemaster
 				newParticle.velocity.y=sinf(newParticle.direction*DEG2RAD)*300;
 				newParticle.lifetime=2.0f;
 				newParticle.color1={255,255,0,255};
+				break;
+			case Particletype::geometricslime:
+				newParticle.velocity.x=RandomFloat(-300.0f,300.0f);
+				newParticle.velocity.y=RandomFloat(-300.0f,300.0f);
+				newParticle.vd=RandomFloat(-60.0f,60.0f);
+				newParticle.direction=RandomFloat(0.0f,360.0f);
+				newParticle.size=0.0f;
+				newParticle.maxsize=RandomFloat(50.0f,400.0f);
+				if(RandomInt(1,3)>2) newParticle.color1=color;
+				else newParticle.color1={255,255,255,150};
+				newParticle.side=RandomInt(3,8);
+				newParticle.alpha=RandomFloat(100.0f,200.0f);
+				break;
+			case Particletype::deadring:
+				newParticle.velocity={0,0};
+				newParticle.size=0.0f;
+				newParticle.size2=0.0f;
+				newParticle.maxsize=size;
+				newParticle.color1=color;
 				break;
 			default:
 				break;
@@ -359,7 +407,7 @@ struct Bullet
 struct BulletPool
 {
 	Bullet Bullets[MAX_BULLETS];
-	int substeps=3;
+	int substeps=5;
 	int count=0;
 	void fire(Bullettype type,int belongto_living_index,Vector2 pos,float direction,Vector2& shake)
 	{
@@ -439,6 +487,7 @@ struct Cell
 	float cosd;
 	vector<Block> Blocks;
 	vector<Flagellum> Flagella;
+	Color color;
 	
 	void update(float deltaT)
 	{
@@ -486,7 +535,7 @@ struct Cell
 							Bullet_pool.fire(Bullettype::spike,id,position+block.rocate,direction+block.direction-90,shake);
 							float rad=DEG2RAD*(direction+block.direction-90);
 							force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
-							Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},RandomInt(2,5),0);
+							Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},0,Color{0,0,0,0},0,RandomInt(2,5));
 							block.timer=2.0f+RandomFloat(0.0f,1.0f);
 						}
 						break;
@@ -501,7 +550,7 @@ struct Cell
 						Bullet_pool.fire(Bullettype::foodvacuole,id,position+block.rocate,block.organelle_direction,shake);
 						float rad=DEG2RAD*block.organelle_direction;
 						force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
-						Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},RandomInt(2,5),0);
+						Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},0,Color{0,0,0,0},0,RandomInt(2,5));
 						block.timer=0.2f;
 					}
 				default:
@@ -698,6 +747,8 @@ struct Cell
 		{
 			if(block->hp<=0.0f)
 			{
+				Particle_master.createparticle(Particletype::geometricslime,position+block->rocate,Vector2{0,0},0,color,0,RandomInt(3,5));
+				Particle_master.createparticle(Particletype::deadring,position+block->rocate,Vector2{0,0},0,{255,255,255,200},400,1);
 				block=Blocks.erase(block);
 				need_to_rebuild=true;
 			}
@@ -753,6 +804,7 @@ struct Cellbuilder
 		{
 		case Type::player:
 			playerID=newCell.id;
+			newCell.color={0,255,0,255};
 			newCell.Blocks.emplace_back(newCell.id,Vector2{-1,0},1.5f,50.0f,PartType::cy_0,Organelle::nucleus);//cytosol细胞质，nucleus细胞核
 			newCell.Blocks.emplace_back(newCell.id,Vector2{0,0},1.1f,50.0f,PartType::cy_0,Organelle::mitochondrion);//mitochondrion线粒体
 			newCell.Blocks.emplace_back(newCell.id,Vector2{1,0},1.5f,50.0f,PartType::cy_0,Organelle::specialized_oral_groove);//“特化口沟”
@@ -762,6 +814,7 @@ struct Cellbuilder
 			break;
 		case Type::chlorella:
 		{
+			newCell.color={255,255,0,255};
 			int sizeclass=1;
 			switch(sizeclass)
 			{
@@ -963,13 +1016,14 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 						enemy.force({block.rocate.x,block.rocate.y},Vector2Normalize(Bullet_pool.Bullets[i].velocity)*50.0f);
 						shake.x+=RandomFloat(-15.0f,15.0f);
 						shake.y+=RandomFloat(-15.0f,15.0f);
-						Particle_master.createparticle(Particletype::hit,enemy.position+block.rocate,Bullet_pool.Bullets[i].velocity,Bullet_pool.Bullets[i].direction,3);
+						Particle_master.createparticle(Particletype::hit,enemy.position+block.rocate,Bullet_pool.Bullets[i].velocity,Bullet_pool.Bullets[i].direction,Color{0,0,0,0},0,3);
 						block.hittimer=0.1f;
 						Bullet_pool.Bullets[i].is_active=false;
 						if(!Bullet_pool.Bullets[i].is_active) break;
 					}
 					if(!Bullet_pool.Bullets[i].is_active) break;
 				}
+				if(!Bullet_pool.Bullets[i].is_active) break;
 			}
 		}
 	}
