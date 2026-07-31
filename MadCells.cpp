@@ -344,6 +344,7 @@ struct Block
 				break;
 			case PartType::cy_4:
 				source={480,0,32,32};
+				break;
 			case PartType::spike:
 				source={512,0,32,32};
 				break;
@@ -590,7 +591,12 @@ struct Cell
 	}
 	void found_center()
 	{
-		if(Blocks.empty()) return;
+		if(Blocks.empty())
+		{
+			center={0.0f,0.0f};
+			isdead=true;
+			return;
+		}
 		float sum_mass=0.0f;
 		Vector2 center0=center;
 		center={0.0f,0.0f};
@@ -638,7 +644,11 @@ struct Cell
 		int nucleusIndex=-1;
 		for(size_t i=0;i<Blocks.size();++i)
 			if(Blocks[i].organelle==Organelle::nucleus) {nucleusIndex=i;break;}
-		if(nucleusIndex==-1) return;
+		if(nucleusIndex==-1)
+		{
+			isdead=true;
+			return;
+		}
 		vector<bool> connected(Blocks.size(), false);
 		queue<int> q;
 		q.push(nucleusIndex);
@@ -692,6 +702,11 @@ struct Cell
 			int self_m=static_cast<int>(block->parttype);
 			if(self_m>=1 && self_m<CONNECT_INDEX)
 			{
+				if(tot==0)
+				{
+					block->parttype=PartType::cy_4;
+					block->direction=0.0f;
+				}
 				if(tot==1)
 				{
 					block->parttype=PartType::cy_3;
@@ -757,10 +772,16 @@ struct Cell
 	{
 		for(auto block=Blocks.begin();block!=Blocks.end();)
 		{
+			if (block->organelle == Organelle::nucleus) {
+				printf("细胞核: hp=%.1f, local=(%.1f,%.1f), rocate=(%.1f,%.1f), world=(%.1f,%.1f)\n",
+					   block->hp, block->local.x, block->local.y, block->rocate.x, block->rocate.y,
+					   position.x + block->rocate.x, position.y + block->rocate.y);
+			}
 			if(block->hp<=0.0f)
 			{
 				Particle_master.createparticle(Particletype::geometricslime,position+block->rocate,Vector2{-300,300},0,color,400,RandomInt(3,5));
 				Particle_master.createparticle(Particletype::deadring,position+block->rocate,Vector2{0,0},0,{255,255,255,200},400,1);
+				if(block->organelle==Organelle::nucleus) isdead=true;
 				block=Blocks.erase(block);
 				need_to_rebuild=true;
 			}
@@ -774,8 +795,15 @@ struct Cell
 	{
 		velocity.x+=f.x/mass;
 		velocity.y+=f.y/mass;
-		float torque=actionpoint.x*f.y-actionpoint.y*f.x;
-		vd+=torque/inertia;
+		if(inertia>0.0001f)
+		{
+			float torque=actionpoint.x*f.y-actionpoint.y*f.x;
+			vd+=torque/inertia;
+		}
+		else
+		{
+			vd=0.0f;
+		}
 	}
 	Findblockpickresult Find_block_localposition(Vector2 local)
 	{
@@ -930,6 +958,7 @@ struct UI
 	Vector2 position2={0,0},moveto2;
 	float lerp2=0.15f;
 	bool fold,left,active=false;
+	Rectangle source;
 	void update()
 	{
 		position+=(moveto-position)*lerp;
@@ -945,9 +974,6 @@ struct UI
 	void draw(Texture2D texture,Font font,string text)
 	{
 		const float scale=1.7f;
-		Rectangle source;
-		if(left) source={0,0,284,56};
-		else source={0,70,284,56};
 		DrawTexturePro(texture,source,{position.x,position.y,284*scale,56*scale},{0,0},0.0f,WHITE);
 		DrawTexturePro(texture,{0,56,284,1},{position.x,position.y+56*scale,284*scale,position.y+position2.y+4*scale},{0,0},0.0f,WHITE);
 		DrawTexturePro(texture,{0,56,284,13},{position.x,position.y+position2.y+112,284*scale,26*scale},{0,0},0.0f,WHITE);
@@ -1087,13 +1113,13 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 	}
 	for(auto& it:Livings)//遍历生物
 	{
+		it.update(deltaT);
+		it.delete_dead();
 		if(it.need_to_rebuild)
 		{
 			it.need_to_rebuild=false;
 			it.rebulildcell();
 		}
-		it.update(deltaT);
-		it.delete_dead();
 		switch(it.type)
 		{
 		case Type::player:
@@ -1175,7 +1201,8 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 	}
 	for(auto it=Livings.begin();it!=Livings.end();)
 	{
-		if(it->isdead)
+		printf("living %d : blocks = %d , isdead = %d\n",it->id,it->Blocks.size(),(int)it->isdead);
+		if(it->isdead || it->Blocks.empty())
 		{
 			Particle_master.createparticle(Particletype::geometricslime,it->position+it->center,Vector2{-1200,1200},0,it->color,1200,RandomInt(8,12));
 			Particle_master.createparticle(Particletype::deadring,it->position+it->center,Vector2{0,0},0,{255,255,255,200},1500,1);
@@ -1460,7 +1487,10 @@ int main()
 	
 	Cellbuilder builder;
 	builder.create(Type::player,Vector2{0,0},0.0f);
-	builder.create(Type::chlorella,Vector2{300,0},0.0f);
+	for(int i=0;i<1;i++)
+	{
+		builder.create(Type::chlorella,Vector2{300+RandomFloat(-100.0f,100.0f),0+RandomFloat(-200.0f,200.0f)},0.0f);
+	}
 	
 	for(int i=0;i<MAX_BULLETS;i++)
 	{
@@ -1471,9 +1501,13 @@ int main()
 	ui1.fold=true;
 	ui1.position={-400.0f,50.0f};
 	ui1.left=true;
+	ui1.source={0,0,284,56};
 	Vector2 UI1_grid;//UI1放置时的网格坐标
+	ui2.position={0.0f,SCREEN_HEIGHT};
+	ui2.moveto={0.0f,SCREEN_HEIGHT-100.0f};
+	ui2.source={0,126,190,64};
 	
-	string all_text="零件库属性板";
+	string all_text="零件库生命活动监测板";
 	int codepointcount;
 	int* codepoints=LoadCodepoints(all_text.c_str(),&codepointcount);
 	Font font=LoadFontEx("fonts/Madfont.ttf",48,codepoints,codepointcount);
