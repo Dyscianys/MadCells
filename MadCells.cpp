@@ -359,6 +359,7 @@ struct Bullet
 struct BulletPool
 {
 	Bullet Bullets[MAX_BULLETS];
+	int substeps=3;
 	int count=0;
 	void fire(Bullettype type,int belongto_living_index,Vector2 pos,float direction,Vector2& shake)
 	{
@@ -940,30 +941,35 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 				Bullet_pool.count--;
 				continue;
 			}
-			Bullet_pool.Bullets[i].position.x+=Bullet_pool.Bullets[i].velocity.x;
-			Bullet_pool.Bullets[i].position.y+=Bullet_pool.Bullets[i].velocity.y;
-			for(auto& enemy:Livings)
+			for(int j=0;j<Bullet_pool.substeps;j++)
 			{
-				if(enemy.id==Bullet_pool.Bullets[i].belongto_living_index) continue;
-				for(auto& block:enemy.Blocks)
+				Bullet_pool.Bullets[i].position.x+=Bullet_pool.Bullets[i].velocity.x/Bullet_pool.substeps;
+				Bullet_pool.Bullets[i].position.y+=Bullet_pool.Bullets[i].velocity.y/Bullet_pool.substeps;
+				for(auto& enemy:Livings)
 				{
-					Vector2 xydist=Bullet_pool.Bullets[i].position-(enemy.position+block.rocate);
-					if(!(fabs(xydist.x)<25.0f && fabs(xydist.y)<25.0f)) continue;
-					float rad=DEG2RAD*-(enemy.direction+block.direction);
-					Vector2 rocateback;
-					rocateback.x=cosf(rad)*xydist.x-sinf(rad)*xydist.y;
-					rocateback.y=sinf(rad)*xydist.x+cosf(rad)*xydist.y;
-					if(!(fabs(rocateback.x)<16.0f && fabs(rocateback.y)<16.0f)) continue;
-					block.hp-=Bullet_pool.Bullets[i].damage;
-					enemy.force({block.rocate.x,block.rocate.y},Vector2Normalize(Bullet_pool.Bullets[i].velocity)*50.0f);
-					shake.x+=RandomFloat(-15.0f,15.0f);
-					shake.y+=RandomFloat(-15.0f,15.0f);
-					Particle_master.createparticle(Particletype::hit,enemy.position+block.rocate,Bullet_pool.Bullets[i].velocity,Bullet_pool.Bullets[i].direction,3);
-					block.hittimer=0.1f;
-					Bullet_pool.Bullets[i].is_active=false;
+					if(enemy.id==Bullet_pool.Bullets[i].belongto_living_index) continue;
+					if(fabs(enemy.position.x-Bullet_pool.Bullets[i].position.x)>500.0f &&
+					   fabs(enemy.position.y-Bullet_pool.Bullets[i].position.y)>500.0f) continue;
+					for(auto& block:enemy.Blocks)
+					{
+						Vector2 xydist=Bullet_pool.Bullets[i].position-(enemy.position+block.rocate);
+						if(!(fabs(xydist.x)<25.0f && fabs(xydist.y)<25.0f)) continue;
+						float rad=DEG2RAD*-(enemy.direction+block.direction);
+						Vector2 rocateback;
+						rocateback.x=cosf(rad)*xydist.x-sinf(rad)*xydist.y;
+						rocateback.y=sinf(rad)*xydist.x+cosf(rad)*xydist.y;
+						if(!(fabs(rocateback.x)<16.0f && fabs(rocateback.y)<16.0f)) continue;
+						block.hp-=Bullet_pool.Bullets[i].damage;
+						enemy.force({block.rocate.x,block.rocate.y},Vector2Normalize(Bullet_pool.Bullets[i].velocity)*50.0f);
+						shake.x+=RandomFloat(-15.0f,15.0f);
+						shake.y+=RandomFloat(-15.0f,15.0f);
+						Particle_master.createparticle(Particletype::hit,enemy.position+block.rocate,Bullet_pool.Bullets[i].velocity,Bullet_pool.Bullets[i].direction,3);
+						block.hittimer=0.1f;
+						Bullet_pool.Bullets[i].is_active=false;
+						if(!Bullet_pool.Bullets[i].is_active) break;
+					}
 					if(!Bullet_pool.Bullets[i].is_active) break;
 				}
-				if(!Bullet_pool.Bullets[i].is_active) break;
 			}
 		}
 	}
