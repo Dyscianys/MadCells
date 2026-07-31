@@ -827,7 +827,7 @@ struct Cellbuilder
 		case Type::chlorella:
 		{
 			newCell.color={255,255,0,255};
-			int sizeclass=1;
+			int sizeclass=RandomInt(1,3);
 			switch(sizeclass)
 			{
 			case 1:
@@ -837,9 +837,54 @@ struct Cellbuilder
 				newCell.Blocks.emplace_back(newCell.id,Vector2{0,-1},1.0f,30.0f,PartType::cy_0,Organelle::none);
 				newCell.Blocks.emplace_back(newCell.id,Vector2{0,1},1.0f,30.0f,PartType::cy_0,Organelle::none);
 				break;
-			case 2:
+			case 2://这些都是deepseek生成的，方便
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,0}, 2.0f, 50.0f, PartType::cy_0, Organelle::nucleus);
+				// 十字
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,0}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{1,0}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,-1}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,1}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
+				// 四角
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,-1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{1,-1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{1,1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
+				// 外圈十字
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
 				break;
 			case 3:
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,0}, 2.5f, 80.0f, PartType::cy_0, Organelle::nucleus);
+				// 十字
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,0}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{1,0}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,-1}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,1}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
+				// 四角
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,-1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{1,-1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{1,1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
+				// 外圈十字
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				//扩张
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,3}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{1,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{2,1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{3,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{2,-1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{1,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{0,-3}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-2,-1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-3,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-2,1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
 				break;
 			default:
 				break;
