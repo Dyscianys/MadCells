@@ -82,7 +82,7 @@ struct SoundPool
 		{
 			if(!it.active && it.basesound==&base)
 			{
-				SetSoundVolume(it.alias,min(volume,1.0f));
+				SetSoundVolume(it.alias,volume);
 				PlaySound(it.alias);
 				it.active=true;
 				return true;
@@ -596,7 +596,7 @@ struct Cell
 							float rad=DEG2RAD*(direction+block.direction-90);
 							force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
 							Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},0,Color{0,0,0,0},0,RandomInt(2,5));
-							Sound_pool.play(shoot2,15.0f/dist);
+							Sound_pool.play(shoot2,min(1.0f,15.0f/dist));
 							block.timer=2.0f+RandomFloat(0.0f,1.0f);
 						}
 						break;
@@ -827,7 +827,7 @@ struct Cell
 				Particle_master.createparticle(Particletype::deadring,position+block->rocate,Vector2{0,0},0,{255,255,255,200},400,1);
 				if(block->organelle==Organelle::nucleus) isdead=true;
 				float dist=Vector2Distance(position+block->rocate,gamecamera.target)/32.0f;
-				Sound_pool.play(broken2,15.0f/dist);
+				Sound_pool.play(broken2,min(1.2f,15.0f/dist));
 				block=Blocks.erase(block);
 				need_to_rebuild=true;
 			}
@@ -1144,14 +1144,14 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 						rocateback.y=sinf(rad)*xydist.x+cosf(rad)*xydist.y;
 						if(!(fabs(rocateback.x)<16.0f && fabs(rocateback.y)<16.0f)) continue;
 						block.hp-=Bullet_pool.Bullets[i].damage;
-						enemy.force({block.rocate.x,block.rocate.y},Vector2Normalize(Bullet_pool.Bullets[i].velocity)*50.0f);
+						enemy.force({block.rocate.x,block.rocate.y},Vector2Normalize(Bullet_pool.Bullets[i].velocity)*30.0f);
 						shake.x+=RandomFloat(-30.0f,30.0f);
 						shake.y+=RandomFloat(-30.0f,30.0f);
 						Particle_master.createparticle(Particletype::hit,enemy.position+block.rocate,Bullet_pool.Bullets[i].velocity,Bullet_pool.Bullets[i].direction,Color{0,0,0,0},0,3);
 						block.hittimer=0.1f;
 						if(block.organelle==Organelle::nucleus && block.hp<=0.0f) enemy.isdead=true;
 						float dist=Vector2Distance(Bullet_pool.Bullets[i].position,gamecamera.target)/32.0f;
-						Sound_pool.play(hit,5.0f/dist);
+						Sound_pool.play(hit,min(1.0f,5.0f/dist));
 						Bullet_pool.Bullets[i].is_active=false;
 						if(!Bullet_pool.Bullets[i].is_active) break;
 					}
@@ -1259,7 +1259,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 			float shakeclass=150.0f*min(1.0f,15.0f/dist);
 			shake.x+=RandomFloat(-shakeclass,shakeclass);
 			shake.y+=RandomFloat(-shakeclass,shakeclass);
-			Sound_pool.play(broken1,20.0f/dist);
+			Sound_pool.play(broken1,min(1.5f,25.0f/dist));
 			it=Livings.erase(it);
 		}
 		else
@@ -1544,8 +1544,9 @@ int main()
 	Sound broken1=LoadSound("asset/sound/broken1.wav");
 	Sound broken2=LoadSound("asset/sound/broken2.wav");
 	Music bgm=LoadMusicStream("asset/sound/face_down.mp3");
+	SetMusicVolume(bgm,0.8);
 	SoundPool Sound_pool;
-	Sound_pool.init(shoot1,5);
+	Sound_pool.init(shoot1,1);
 	Sound_pool.init(shoot2,7);
 	Sound_pool.init(hit,7);
 	Sound_pool.init(broken1,3);
@@ -1553,7 +1554,7 @@ int main()
 	
 	Cellbuilder builder;
 	builder.create(Type::player,Vector2{0,0},0.0f);
-	for(int i=0;i<1;i++)
+	for(int i=0;i<5;i++)
 	{
 		builder.create(Type::chlorella,Vector2{300+RandomFloat(-100.0f,100.0f),0+RandomFloat(-200.0f,200.0f)},0.0f);
 	}
