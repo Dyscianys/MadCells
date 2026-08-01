@@ -529,7 +529,7 @@ struct Findblockpickresult
 	int block_index;
 	bool is_nucleus;
 };
-
+int playerID,playernucleusindex;
 struct Cell
 {
 	int id;
@@ -697,6 +697,11 @@ struct Cell
 		{
 			isdead=true;
 			return;
+		}
+		if(type==Type::player)
+		{
+			playerID=id;
+			playernucleusindex=nucleusIndex;
 		}
 		vector<bool> connected(Blocks.size(), false);
 		queue<int> q;
@@ -997,6 +1002,14 @@ struct Cellbuilder
 		Livings.push_back(newCell);
 	}
 };
+struct Waveform
+{
+	Vector2 baseposition={145,240};
+	float position=0.0f,velocity=0.0f;
+	float maxposition=240.0f;
+	Rectangle source;
+};
+vector<Waveform> waves;
 struct UI
 {
 	Vector2 position={0,0},moveto;
@@ -1004,8 +1017,10 @@ struct UI
 	Vector2 position2={0,0},moveto2;
 	float lerp2=0.15f;
 	bool fold,left,active=false;
+	float timer=0.0f,timer2=0.0f,timer3=0.0f;
 	Rectangle source;
-	void update()
+	bool warning=false;
+	void update(int type,float deltaT)
 	{
 		position+=(moveto-position)*lerp;
 		if(fold)
@@ -1016,21 +1031,84 @@ struct UI
 		{
 			position2+=(moveto2-position2)*lerp2;
 		}
+		switch(type)
+		{
+		case 1:
+			break;
+		case 2:
+			timer+=8.0f*deltaT;
+			if(timer>=8.0f) timer-=8.0f;
+			if(playerID!=-1 && playernucleusindex!=-1) timer2+=20.0f/Livings[playerID].Blocks[playernucleusindex].hp*deltaT;
+			if(timer2>=1.0f)
+			{
+				timer2-=1.0f;
+				Waveform newWave;
+				newWave.velocity=100.0f;
+				newWave.source={0,356,18,26};
+				waves.push_back(newWave);
+			}
+			if(warning)
+			{
+				if(timer3>0.0f) timer3-=deltaT;
+				else warning=false;
+			}
+			else
+			{
+				timer3=0.2f;
+			}
+			for(auto wave=waves.begin();wave!=waves.end();)
+			{
+				wave->position+=wave->velocity*deltaT;
+				if(wave->position>wave->maxposition)
+				{
+					wave=waves.erase(wave);
+				}
+				else
+				{
+					wave++;
+				}
+			}
+			break;
+		default:
+			break;
+		}
 	}
-	void draw(Texture2D texture,Font font,string text)
+	void draw(Texture2D texture,int type,Font font,string text)
 	{
 		const float scale=1.7f;
-		DrawTexturePro(texture,source,{position.x,position.y,284*scale,56*scale},{0,0},0.0f,WHITE);
-		DrawTexturePro(texture,{0,56,284,1},{position.x,position.y+56*scale,284*scale,position.y+position2.y+4*scale},{0,0},0.0f,WHITE);
-		DrawTexturePro(texture,{0,56,284,13},{position.x,position.y+position2.y+112,284*scale,26*scale},{0,0},0.0f,WHITE);
-		if(left)
+		switch(type)
 		{
-			DrawTextEx(font,text.c_str(),{position.x+50,position.y+28},48,0,WHITE);
-		}
-		else
+		case 1:
+			DrawTexturePro(texture,source,{position.x,position.y,284*scale,56*scale},{0,0},0.0f,WHITE);
+			DrawTexturePro(texture,{0,56,284,1},{position.x,position.y+56*scale,284*scale,position.y+position2.y+4*scale},{0,0},0.0f,WHITE);
+			DrawTexturePro(texture,{0,56,284,13},{position.x,position.y+position2.y+112,284*scale,26*scale},{0,0},0.0f,WHITE);
+			if(left)
+			{
+				DrawTextEx(font,text.c_str(),{position.x+50,position.y+28},48,0,WHITE);
+			}
+			else
+			{
+				DrawTextEx(font,text.c_str(),{position.x+240,position.y+28},48,0,WHITE);
+			}
+			break;
+		case 2:
 		{
-			DrawTextEx(font,text.c_str(),{position.x+240,position.y+28},48,0,WHITE);
+			DrawTexturePro(texture,source,{position.x,position.y,source.width*scale,source.height*scale},{0,0},0.0f,WHITE);
+			DrawTextEx(font,text.c_str(),{position.x+570,position.y+230},48,0,WHITE);
+			Color warningcolor;
+			if(warning) warningcolor={255,0,0,255};
+			else warningcolor={255,255,255,255};
+			DrawTexturePro(texture,{floor(timer)*64.0f,292,64,64},{position.x+17,position.y+160,64*scale,64*scale},{0,0},0.0f,warningcolor);
+			for(auto& wave:waves)
+			{
+				DrawTexturePro(texture,wave.source,{position.x+wave.baseposition.x+wave.position,position.y+wave.baseposition.y,wave.source.width*scale,wave.source.height*scale},{0,0},0.0f,WHITE);
+			}
+			break;
 		}
+		default:
+			break;
+		}
+		
 	}
 };
 
@@ -1103,7 +1181,7 @@ int mod(int a,int b)
 	return (a%b+b)%b;
 }
 
-void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Music& bgm,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2,Sound& hit,Sound& broken1,Sound& broken2)
+void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Music& bgm,UI& ui2,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2,Sound& hit,Sound& broken1,Sound& broken2)
 {
 	mouseworldposition=GetScreenToWorld2D(GetMousePosition(),gamecamera);
 	UpdateMusicStream(bgm);
@@ -1152,6 +1230,17 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 						if(block.organelle==Organelle::nucleus && block.hp<=0.0f) enemy.isdead=true;
 						float dist=Vector2Distance(Bullet_pool.Bullets[i].position,gamecamera.target)/32.0f;
 						Sound_pool.play(hit,min(1.0f,5.0f/dist));
+						if(enemy.type==Type::player)
+						{
+							Waveform newWave;
+							newWave.source={18,356,20,26};
+							newWave.velocity=180.0f;
+							waves.push_back(newWave);
+							if(block.organelle==Organelle::nucleus)
+							{
+								ui2.warning=true;
+							}
+						}
 						Bullet_pool.Bullets[i].is_active=false;
 						if(!Bullet_pool.Bullets[i].is_active) break;
 					}
@@ -1253,6 +1342,10 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 	{
 		if(it->isdead || it->Blocks.empty())
 		{
+			if(it->id==playerID)
+			{
+				playerID=-1;
+			}
 			Particle_master.createparticle(Particletype::geometricslime,it->position+it->center,Vector2{-1200,1200},0,it->color,1200,RandomInt(8,12));
 			Particle_master.createparticle(Particletype::deadring,it->position+it->center,Vector2{0,0},0,{255,255,255,200},1500,1);
 			float dist=Vector2Distance(it->position+it->center,gamecamera.target)/32.0f;
@@ -1283,12 +1376,13 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 		it.update(deltaT);
 	}
 	Sound_pool.update();
+	ui2.update(2,deltaT);
 }
 void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Cellbuilder builder,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Vector2& UI1_grid)
 {
 	mouseworldposition=GetScreenToWorld2D(GetMousePosition(),assemcamera);
 	assemcamera.target=Vector2Scale(mouseworldposition,0.2f);
-	ui1.update();
+	ui1.update(1,deltaT);
 	UI1_grid.x=(int)roundf(((mouseworldposition.x+Livings[builder.playerID].center.x)/32.0f));
 	UI1_grid.y=(int)roundf(((mouseworldposition.y+Livings[builder.playerID].center.y)/32.0f));
 	if(!zooming)
@@ -1413,7 +1507,7 @@ void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Cam
 	}
 }
 
-void DrawGaming(Texture2D texture_all_parts,Texture2D background,Camera2D gamecamera,Cellbuilder builder)
+void DrawGaming(Texture2D texture_all_parts,Texture texture_ui,Texture2D background,Camera2D& gamecamera,Cellbuilder& builder,UI& ui2,Font& font)
 {
 	DrawTexturePro(background,{0,0,1600,900},{0,0,SCREEN_WIDTH,SCREEN_HEIGHT},{0,0},0.0f,WHITE);
 	BeginMode2D(gamecamera);
@@ -1486,12 +1580,13 @@ void DrawGaming(Texture2D texture_all_parts,Texture2D background,Camera2D gameca
 		it.draw();
 	}
 	EndMode2D();
+	ui2.draw(texture_ui,2,font,"健康指示");
 }
 
 void DrawAssembling(Texture2D texture_all_parts,Texture2D texture_ui,Camera2D assemcamera,Cellbuilder builder,UI ui1,Vector2 UI1_grid,Font font,vector<Part>&Partlibrary)
 {
 	ClearBackground(BLACK);
-	ui1.draw(texture_ui,font,"零件库");
+	ui1.draw(texture_ui,1,font,"零件库");
 	if(ui1.position2.y>300)
 	{
 		for(auto& it:Partlibrary)
@@ -1570,11 +1665,11 @@ int main()
 	ui1.left=true;
 	ui1.source={0,0,284,56};
 	Vector2 UI1_grid;//UI1放置时的网格坐标
-	ui2.position={0.0f,SCREEN_HEIGHT};
-	ui2.moveto={0.0f,SCREEN_HEIGHT-100.0f};
-	ui2.source={0,126,190,64};
+	ui2.position={-400.0f,SCREEN_HEIGHT};
+	ui2.moveto={20.0f,SCREEN_HEIGHT-300.0f};
+	ui2.source={0,126,330,166};
 	
-	string all_text="零件库生命活动监测板";
+	string all_text="零件库健康指示";
 	int codepointcount;
 	int* codepoints=LoadCodepoints(all_text.c_str(),&codepointcount);
 	Font font=LoadFontEx("fonts/Madfont.ttf",48,codepoints,codepointcount);
@@ -1598,7 +1693,7 @@ int main()
 		{
 		case GameState::GAMING:
 		{
-			UpdateGaming(deltaT,interface,gamecamera,assemcamera,mouseworldposition,zooming,Partlibrary,ui1,bgm,Sound_pool,shoot1,shoot2,hit,broken1,broken2);
+			UpdateGaming(deltaT,interface,gamecamera,assemcamera,mouseworldposition,zooming,Partlibrary,ui1,bgm,ui2,Sound_pool,shoot1,shoot2,hit,broken1,broken2);
 			break;
 		}
 		case GameState::ASSEMBLING:
@@ -1613,7 +1708,7 @@ int main()
 		{
 		case GameState::GAMING:
 		{
-			DrawGaming(texture_all_parts,background,gamecamera,builder);
+			DrawGaming(texture_all_parts,texture_ui,background,gamecamera,builder,ui2,font);
 			break;
 		}
 		case GameState::ASSEMBLING:
