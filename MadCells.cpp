@@ -1277,6 +1277,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 					gamecamera.target.y+=(it.position.y+block.rocate.y-gamecamera.target.y)*0.15;
 					if(zooming)
 					{
+						ui2.moveto={-400.0f,SCREEN_HEIGHT};
 						gamecamera.zoom+=gamecamera.zoom*gamecamera.zoom*deltaT;
 						if(gamecamera.zoom>=400.0f)
 						{
@@ -1285,6 +1286,8 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 							ui1.moveto={30,50};
 							ui1.moveto2={0,400};
 							ui1.position2={0,0};
+							ui2.position={-400.0f,SCREEN_HEIGHT};
+							ui2.moveto={20.0f,SCREEN_HEIGHT-300};
 							for(auto& it:Partlibrary)
 							{
 								it.timer=it.retimer;
@@ -1378,6 +1381,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 	Sound_pool.update();
 	ui2.update(2,deltaT);
 }
+
 void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Cellbuilder builder,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Vector2& UI1_grid)
 {
 	mouseworldposition=GetScreenToWorld2D(GetMousePosition(),assemcamera);
@@ -1460,7 +1464,7 @@ void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Cam
 	else
 	{
 		ui1.fold=true;
-		ui1.position2.y=0;
+		ui1.moveto2.y=0;
 		assemcamera.zoom-=4.0f*deltaT;
 		if(assemcamera.zoom<1.0f) ui1.moveto.x=-650;
 		if(assemcamera.zoom<0.05f)
@@ -1668,6 +1672,7 @@ int main()
 	ui2.position={-400.0f,SCREEN_HEIGHT};
 	ui2.moveto={20.0f,SCREEN_HEIGHT-300.0f};
 	ui2.source={0,126,330,166};
+	ui2.lerp=0.05f;
 	
 	string all_text="零件库健康指示";
 	int codepointcount;
