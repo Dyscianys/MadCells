@@ -254,7 +254,7 @@ struct Block
 	float direction=0.0f;
 	float organelle_direction=0.0f;
 	float hp;
-	float timer=0.0f;
+	float timer=RandomFloat(0.5f,1.0f);
 	float hittimer=0.0f;
 	PartType parttype;
 	Organelle organelle;
