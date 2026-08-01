@@ -592,7 +592,7 @@ struct Cell
 						if(block.timer<=0.0f)
 						{
 							float dist=Vector2Distance(position+block.rocate,gamecamera.target)/32.0f;
-							Bullet_pool.fire(Bullettype::spike,id,position+block.rocate,direction+block.direction-90,shake,min((15.0f/dist),1.0f)*30.0f);
+							Bullet_pool.fire(Bullettype::spike,id,position+block.rocate,direction+block.direction-90,shake,min((15.0f/dist),1.0f)*25.0f);
 							float rad=DEG2RAD*(direction+block.direction-90);
 							force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
 							Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},0,Color{0,0,0,0},0,RandomInt(2,5));
@@ -1038,7 +1038,7 @@ struct UI
 		case 2:
 			timer+=8.0f*deltaT;
 			if(timer>=8.0f) timer-=8.0f;
-			if(playerID!=-1 && playernucleusindex!=-1) timer2+=20.0f/Livings[playerID].Blocks[playernucleusindex].hp*deltaT;
+			if(playerID!=-1 && playernucleusindex!=-1) timer2+=20.0f/Livings[playerID].Blocks[playernucleusindex].hp*deltaT+0.001f;
 			if(timer2>=1.0f)
 			{
 				timer2-=1.0f;
@@ -1098,11 +1098,14 @@ struct UI
 			Color warningcolor;
 			if(warning) warningcolor={255,0,0,255};
 			else warningcolor={255,255,255,255};
-			DrawTexturePro(texture,{floor(timer)*64.0f,292,64,64},{position.x+17,position.y+160,64*scale,64*scale},{0,0},0.0f,warningcolor);
+			if(playerID!=-1) DrawTexturePro(texture,{floor(timer)*64.0f,292,64,64},{position.x+17,position.y+160,64*scale,64*scale},{0,0},0.0f,warningcolor);
 			for(auto& wave:waves)
 			{
 				DrawTexturePro(texture,wave.source,{position.x+wave.baseposition.x+wave.position,position.y+wave.baseposition.y,wave.source.width*scale,wave.source.height*scale},{0,0},0.0f,WHITE);
 			}
+			float texthp=Livings[playerID].Blocks[playernucleusindex].hp;
+			if(playerID==-1) texthp=0.0f;
+			DrawTextEx(font,TextFormat("%.1f",texthp),{position.x+157,position.y+184},36,0,RED);
 			break;
 		}
 		default:
@@ -1223,12 +1226,13 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 						if(!(fabs(rocateback.x)<16.0f && fabs(rocateback.y)<16.0f)) continue;
 						block.hp-=Bullet_pool.Bullets[i].damage;
 						enemy.force({block.rocate.x,block.rocate.y},Vector2Normalize(Bullet_pool.Bullets[i].velocity)*30.0f);
-						shake.x+=RandomFloat(-30.0f,30.0f);
-						shake.y+=RandomFloat(-30.0f,30.0f);
 						Particle_master.createparticle(Particletype::hit,enemy.position+block.rocate,Bullet_pool.Bullets[i].velocity,Bullet_pool.Bullets[i].direction,Color{0,0,0,0},0,3);
 						block.hittimer=0.1f;
 						if(block.organelle==Organelle::nucleus && block.hp<=0.0f) enemy.isdead=true;
 						float dist=Vector2Distance(Bullet_pool.Bullets[i].position,gamecamera.target)/32.0f;
+						float shakeclass=20.0f*min(1.0f,20.0f/dist+0.01f);
+						shake.x+=RandomFloat(-shakeclass,shakeclass);
+						shake.y+=RandomFloat(-shakeclass,shakeclass);
 						Sound_pool.play(hit,min(1.0f,5.0f/dist));
 						if(enemy.type==Type::player)
 						{
@@ -1352,7 +1356,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 			Particle_master.createparticle(Particletype::geometricslime,it->position+it->center,Vector2{-1200,1200},0,it->color,1200,RandomInt(8,12));
 			Particle_master.createparticle(Particletype::deadring,it->position+it->center,Vector2{0,0},0,{255,255,255,200},1500,1);
 			float dist=Vector2Distance(it->position+it->center,gamecamera.target)/32.0f;
-			float shakeclass=150.0f*min(1.0f,15.0f/dist);
+			float shakeclass=150.0f*min(1.0f,30.0f/dist);
 			shake.x+=RandomFloat(-shakeclass,shakeclass);
 			shake.y+=RandomFloat(-shakeclass,shakeclass);
 			Sound_pool.play(broken1,min(1.5f,25.0f/dist));
@@ -1653,9 +1657,9 @@ int main()
 	
 	Cellbuilder builder;
 	builder.create(Type::player,Vector2{0,0},0.0f);
-	for(int i=0;i<5;i++)
+	for(int i=0;i<10;i++)
 	{
-		builder.create(Type::chlorella,Vector2{300+RandomFloat(-100.0f,100.0f),0+RandomFloat(-200.0f,200.0f)},0.0f);
+		builder.create(Type::chlorella,Vector2{RandomFloat(-800.0f,800.0f),0+RandomFloat(-500.0f,500.0f)},0.0f);
 	}
 	
 	for(int i=0;i<MAX_BULLETS;i++)
@@ -1674,7 +1678,7 @@ int main()
 	ui2.source={0,126,330,166};
 	ui2.lerp=0.05f;
 	
-	string all_text="零件库健康指示";
+	string all_text="零件库健康指示.0123456789";
 	int codepointcount;
 	int* codepoints=LoadCodepoints(all_text.c_str(),&codepointcount);
 	Font font=LoadFontEx("fonts/Madfont.ttf",48,codepoints,codepointcount);
