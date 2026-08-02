@@ -1240,7 +1240,7 @@ int mod(int a,int b)
 	return (a%b+b)%b;
 }
 
-void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Music& bgm,UI& ui2,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2,Sound& hit,Sound& broken1,Sound& broken2)
+void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Music& bgm,UI& ui2,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2,Sound& hit,Sound& broken1,Sound& broken2,Sound& dong)
 {
 	mouseworldposition=GetScreenToWorld2D(GetMousePosition(),gamecamera);
 	UpdateMusicStream(bgm);
@@ -1289,7 +1289,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 						float shakeclass=20.0f*min(1.0f,20.0f/dist+0.01f);
 						shake.x+=RandomFloat(-shakeclass,shakeclass);
 						shake.y+=RandomFloat(-shakeclass,shakeclass);
-						Sound_pool.play(hit,min(1.0f,5.0f/dist));
+						Sound_pool.play(hit,min(1.0f,10.0f/dist));
 						if(enemy.type==Type::player)
 						{
 							Waveform newWave;
@@ -1328,6 +1328,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 											other.overload=true;
 											other.overloadtimer=1.0f;
 											Particle_master.createparticle(Particletype::overloadring,Livings[Bullet_pool.Bullets[i].belongto_living_index].position+other.rocate,{0,0},0,YELLOW,200,1);
+											Sound_pool.play(dong,min(0.8f,10.0f/dist));
 										}
 									}
 								}
@@ -1734,6 +1735,7 @@ int main()
 	Sound hit=LoadSound("asset/sound/hit.wav");
 	Sound broken1=LoadSound("asset/sound/broken1.wav");
 	Sound broken2=LoadSound("asset/sound/broken2.wav");
+	Sound dong=LoadSound("asset/sound/dong.wav");
 	Music bgm=LoadMusicStream("asset/sound/face_down.mp3");
 	SetMusicVolume(bgm,0.8);
 	SoundPool Sound_pool;
@@ -1742,6 +1744,7 @@ int main()
 	Sound_pool.init(hit,7);
 	Sound_pool.init(broken1,3);
 	Sound_pool.init(broken2,5);
+	Sound_pool.init(dong,5);
 	
 	Cellbuilder builder;
 	builder.create(Type::player,Vector2{0,0},0.0f);
@@ -1790,7 +1793,7 @@ int main()
 		{
 		case GameState::GAMING:
 		{
-			UpdateGaming(deltaT,interface,gamecamera,assemcamera,mouseworldposition,zooming,Partlibrary,ui1,bgm,ui2,Sound_pool,shoot1,shoot2,hit,broken1,broken2);
+			UpdateGaming(deltaT,interface,gamecamera,assemcamera,mouseworldposition,zooming,Partlibrary,ui1,bgm,ui2,Sound_pool,shoot1,shoot2,hit,broken1,broken2,dong);
 			break;
 		}
 		case GameState::ASSEMBLING:
@@ -1828,6 +1831,7 @@ int main()
 	UnloadSound(hit);
 	UnloadSound(broken1);
 	UnloadSound(broken2);
+	UnloadSound(dong);
 	UnloadMusicStream(bgm);
 	
 	return 0;
