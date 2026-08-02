@@ -53,7 +53,7 @@ enum class Bullettype
 };
 enum class Particletype
 {
-	bubble,hit,geometricslime,deadring
+	bubble,hit,geometricslime,deadring,overloadring
 };
 
 struct Sound2D
@@ -141,8 +141,14 @@ struct Particle
 			else lifetime=-1.0f;
 			break;
 		case Particletype::deadring:
-			size+=(maxsize-size)*0.1f;
-			size2+=(maxsize-size2)*0.03f;
+			size+=(maxsize-size)*0.18f;
+			size2+=(maxsize-size2)*0.08f;
+			if(maxsize-size2>=3.0f) lifetime=1e6;
+			else lifetime=-1.0f;
+			break;
+		case Particletype::overloadring:
+			size+=(maxsize-size)*0.13f;
+			size2+=(maxsize-size2)*0.05f;
 			if(maxsize-size2>=3.0f) lifetime=1e6;
 			else lifetime=-1.0f;
 			break;
@@ -180,6 +186,9 @@ struct Particle
 			break;
 		}
 		case Particletype::deadring:
+			DrawRing(position,(size/2.0f),(size2/2.0f),0,360,24,color1);
+			break;
+		case Particletype::overloadring:
 			DrawRing(position,(size/2.0f),(size2/2.0f),0,360,24,color1);
 			break;
 		default:
@@ -236,6 +245,13 @@ struct Particlemaster
 				newParticle.maxsize=size;
 				newParticle.color1=color;
 				break;
+			case Particletype::overloadring:
+				newParticle.velocity={0,0};
+				newParticle.size=0.0f;
+				newParticle.size2=0.0f;
+				newParticle.maxsize=size;
+				newParticle.color1=color;
+				break;
 			default:
 				break;
 			}
@@ -259,9 +275,18 @@ struct Block
 	PartType parttype;
 	Organelle organelle;
 	Blockstate state=Blockstate::none;
-	Block(int id,Vector2 pos,float m,float hp_,PartType ma,Organelle o)
+	float charge=0.0f;
+	float maxcharge=100.0f;
+	bool overload=false;
+	float overloadtimer=0.0f;
+	float force=0.0f;
+	float firetimer=0.0f;
+	bool overloadinfluence=false;
+	int blockID=0;
+	Block(int id,int blockid,Vector2 pos,float m,float hp_,PartType ma,Organelle o)
 	{
 		belongto_cell_ID=id;
+		blockID=blockid;
 		local=pos*32;
 		mass=m;
 		hp=hp_;
@@ -458,7 +483,7 @@ struct Bullet
 	float lifetime;
 	bool is_active=false;
 	Bullettype type;
-	int belongto_living_index;
+	int belongto_living_index,belongto_block_index;
 	Color lightcolor={255,255,255,255};
 };
 
@@ -467,7 +492,7 @@ struct BulletPool
 	Bullet Bullets[MAX_BULLETS];
 	int substeps=5;
 	int count=0;
-	void fire(Bullettype type,int belongto_living_index,Vector2 pos,float direction,Vector2& shake,float shakeclass)
+	void fire(Bullettype type,int belongto_living_index,int belongto_block_index,Vector2 pos,float direction,Vector2& shake,float shakeclass)
 	{
 		shake.x+=RandomFloat(-shakeclass,shakeclass);
 		shake.y+=RandomFloat(-shakeclass,shakeclass);
@@ -509,6 +534,7 @@ struct BulletPool
 		Bullets[index].is_active=true;
 		count++;
 		Bullets[index].belongto_living_index=belongto_living_index;
+		Bullets[index].belongto_block_index=belongto_block_index;
 		float rad=DEG2RAD*direction;
 		Bullets[index].velocity.x=cosf(rad)*v;
 		Bullets[index].velocity.y=sinf(rad)*v;
@@ -547,6 +573,7 @@ struct Cell
 	vector<Flagellum> Flagella;
 	Color color;
 	bool isdead=false;
+	int nextblockID=0;
 	
 	void update(float deltaT,Camera2D& gamecamera,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2)
 	{
@@ -576,28 +603,36 @@ struct Cell
 					case PartType::mount:
 						sum_d+=90;
 						rad=sum_d*DEG2RAD;
-						force(block.rocate,{cosf(rad)*180*deltaT,sinf(rad)*180*deltaT});
+						if(block.overloadinfluence) block.force=360.0f;
+						else block.force=180.0f;
+						force(block.rocate,{cosf(rad)*block.force*deltaT,sinf(rad)*block.force*deltaT});
 						break;
 					case PartType::cilium_left:
 						sum_d+=0;
 						rad=sum_d*DEG2RAD;
-						force(block.rocate,{cosf(rad)*80*deltaT,sinf(rad)*80*deltaT});
+						if(block.overloadinfluence) block.force=160.0f;
+						else block.force=80.0f;
+						force(block.rocate,{cosf(rad)*block.force*deltaT,sinf(rad)*block.force*deltaT});
 						break;
 					case PartType::cilium_right:
 						sum_d+=180;
 						rad=sum_d*DEG2RAD;
-						force(block.rocate,{cosf(rad)*80*deltaT,sinf(rad)*80*deltaT});
+						if(block.overloadinfluence) block.force=160.0f;
+						else block.force=80.0f;
+						force(block.rocate,{cosf(rad)*block.force*deltaT,sinf(rad)*block.force*deltaT});
 						break;
 					case PartType::spike:
 						if(block.timer<=0.0f)
 						{
 							float dist=Vector2Distance(position+block.rocate,gamecamera.target)/32.0f;
-							Bullet_pool.fire(Bullettype::spike,id,position+block.rocate,direction+block.direction-90,shake,min((15.0f/dist),1.0f)*25.0f);
+							Bullet_pool.fire(Bullettype::spike,id,block.blockID,position+block.rocate,direction+block.direction-90,shake,min((15.0f/dist),1.0f)*25.0f);
 							float rad=DEG2RAD*(direction+block.direction-90);
 							force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
 							Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},0,Color{0,0,0,0},0,RandomInt(2,5));
 							Sound_pool.play(shoot2,min(1.0f,15.0f/dist));
-							block.timer=2.0f+RandomFloat(0.0f,1.0f);
+							if(block.overloadinfluence) block.firetimer=0.2f;
+							else block.firetimer=2.0f+RandomFloat(0.0f,1.0f);
+							block.timer=block.firetimer;
 						}
 						break;
 					default:
@@ -608,15 +643,36 @@ struct Cell
 				case Organelle::specialized_oral_groove:
 					if(block.timer<=0)
 					{
-						Bullet_pool.fire(Bullettype::foodvacuole,id,position+block.rocate,block.organelle_direction,shake,20.0f);
+						Bullet_pool.fire(Bullettype::foodvacuole,id,block.blockID,position+block.rocate,block.organelle_direction,shake,20.0f);
 						float rad=DEG2RAD*block.organelle_direction;
 						force(block.rocate,{cosf(rad)*-10,sinf(rad)*-10});
 						Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},0,Color{0,0,0,0},0,RandomInt(2,5));
 						Sound_pool.play(shoot1,1.0f);
-						block.timer=0.2f;
+						if(block.overloadinfluence) block.firetimer=0.1f;
+						else block.firetimer=0.2f;
+						block.timer=block.firetimer;
 					}
+					break;
 				default:
 					break;
+				}
+			}
+			block.overloadinfluence=false;
+			if(block.overload)
+			{
+				block.overloadtimer-=deltaT;
+				if(block.overloadtimer<=0.0f)
+				{
+					block.overload=false;
+					block.charge=0.0f;
+				}
+				for(auto& other:Blocks)
+				{
+					float d=Vector2Distance(block.local,other.local);
+					if(d<80.0f)
+					{
+						other.overloadinfluence=true;
+					}
 				}
 			}
 		}
@@ -877,6 +933,11 @@ struct Cell
 		}
 		return {false,false,-1,false};
 	}
+	void createblock(int cellid,Vector2 local,float mass,float hp,PartType parttype,Organelle organelle)
+	{
+		Block newBlock(cellid,nextblockID++,local,mass,hp,parttype,organelle);
+		Blocks.push_back(newBlock);
+	}
 };
 vector<Cell> Livings;
 
@@ -884,121 +945,115 @@ struct Cellbuilder
 {
 	int nextID=0;
 	int playerID=-1;
-	void create(Type type,Vector2 pos,float dir)
-	{
+	void create(Type type, Vector2 pos, float dir) {//这个函数是deepseek帮忙修改的，有多余空格
 		Cell newCell;
-		newCell.id=nextID++;
-		newCell.position=pos;
-		newCell.direction=dir;
-		newCell.type=type;
-		switch(type)
-		{
+		newCell.id = nextID++;
+		newCell.position = pos;
+		newCell.direction = dir;
+		newCell.type = type;
+		newCell.nextblockID = 0; // 确保每个新细胞的 blockID 从 0 开始
+		
+		switch(type) {
 		case Type::player:
-			playerID=newCell.id;
-			newCell.color={0,255,0,255};
-			newCell.Blocks.emplace_back(newCell.id,Vector2{-1,0},1.5f,50.0f,PartType::cy_0,Organelle::nucleus);//cytosol细胞质，nucleus细胞核
-			newCell.Blocks.emplace_back(newCell.id,Vector2{0,0},1.1f,50.0f,PartType::cy_0,Organelle::mitochondrion);//mitochondrion线粒体
-			newCell.Blocks.emplace_back(newCell.id,Vector2{1,0},1.5f,50.0f,PartType::cy_0,Organelle::specialized_oral_groove);//“特化口沟”
-			newCell.Blocks.emplace_back(newCell.id,Vector2{-2,0},0.4f,30.0f,PartType::mount,Organelle::none);//鞭毛
-			newCell.Blocks.emplace_back(newCell.id,Vector2{0,-1},0.3f,20.0f,PartType::cilium_left,Organelle::none);//纤毛
-			newCell.Blocks.emplace_back(newCell.id,Vector2{0,1},0.3f,20.0f,PartType::cilium_right,Organelle::none);
+			playerID = newCell.id;
+			newCell.color = {0, 255, 0, 255};
+			newCell.createblock(newCell.id, Vector2{-1,0}, 1.5f, 50.0f, PartType::cy_0, Organelle::nucleus);
+			newCell.createblock(newCell.id, Vector2{0,0}, 1.1f, 50.0f, PartType::cy_0, Organelle::mitochondrion);
+			newCell.createblock(newCell.id, Vector2{1,0}, 1.5f, 50.0f, PartType::cy_0, Organelle::specialized_oral_groove);
+			newCell.createblock(newCell.id, Vector2{-2,0}, 0.4f, 30.0f, PartType::mount, Organelle::none);
+			newCell.createblock(newCell.id, Vector2{0,-1}, 0.3f, 20.0f, PartType::cilium_left, Organelle::none);
+			newCell.createblock(newCell.id, Vector2{0,1}, 0.3f, 20.0f, PartType::cilium_right, Organelle::none);
 			break;
-		case Type::chlorella:
-		{
-			newCell.color={255,255,0,255};
-			int sizeclass=RandomInt(1,3);
-			switch(sizeclass)
-			{
-			case 1:
-				newCell.Blocks.emplace_back(newCell.id,Vector2{0,0},1.5f,30.0f,PartType::cy_0,Organelle::nucleus);
-				newCell.Blocks.emplace_back(newCell.id,Vector2{-1,0},1.0f,30.0f,PartType::cy_0,Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id,Vector2{1,0},1.0f,30.0f,PartType::cy_0,Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id,Vector2{0,-1},1.0f,30.0f,PartType::cy_0,Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id,Vector2{0,1},1.0f,30.0f,PartType::cy_0,Organelle::none);
-				break;
-			case 2://这些都是deepseek生成的，方便
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,0}, 2.0f, 50.0f, PartType::cy_0, Organelle::nucleus);
-				// 十字
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,0}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{1,0}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,-1}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,1}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
-				// 四角
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,-1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{1,-1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{1,1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
-				// 外圈十字
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				break;
-			case 3:
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,0}, 2.5f, 80.0f, PartType::cy_0, Organelle::nucleus);
-				// 十字
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,0}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{1,0}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,-1}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,1}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
-				// 四角
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,-1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{1,-1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{1,1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
-				// 外圈十字
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				//扩张
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,3}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{1,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{2,1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{3,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{2,-1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{1,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{0,-3}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-2,-1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-3,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-2,1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				newCell.Blocks.emplace_back(newCell.id, Vector2{-1,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
-				break;
-			default:
-				break;
-			}
-			float spikechance=0.3f;//随机生成刺细胞
-			Vector2 dirs[4]={{0,-32},{0,32},{-32,0},{32,0}};
-			for(const auto& block:newCell.Blocks)
-			{
-				int type=(int)block.parttype;
-				if(!(type>=1 && type<CONNECT_INDEX)) continue;
-				for(const auto& d:dirs)
-				{
-					Vector2 checkpos=block.local+d;
-					bool occupied=false;
-					for(const auto& existing:newCell.Blocks)
-					{
-						if(existing.local==checkpos)
-						{
-							occupied=true;
-							break;
+			
+			case Type::chlorella: {
+				newCell.color = {255, 255, 0, 255};
+				int sizeclass = RandomInt(1, 3);
+				switch(sizeclass) {
+				case 1:
+					newCell.createblock(newCell.id, Vector2{0,0}, 1.5f, 30.0f, PartType::cy_0, Organelle::nucleus);
+					newCell.createblock(newCell.id, Vector2{-1,0}, 1.0f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{1,0}, 1.0f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{0,-1}, 1.0f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{0,1}, 1.0f, 30.0f, PartType::cy_0, Organelle::none);
+					break;
+				case 2:
+					newCell.createblock(newCell.id, Vector2{0,0}, 2.0f, 50.0f, PartType::cy_0, Organelle::nucleus);
+					newCell.createblock(newCell.id, Vector2{-1,0}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{1,0}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{0,-1}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{0,1}, 1.2f, 40.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{-1,-1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{1,-1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{-1,1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{1,1}, 0.8f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{-2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{0,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{0,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					break;
+				case 3:
+					newCell.createblock(newCell.id, Vector2{0,0}, 2.5f, 80.0f, PartType::cy_0, Organelle::nucleus);
+					// 十字
+					newCell.createblock(newCell.id, Vector2{-1,0}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{1,0}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{0,-1}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{0,1}, 1.5f, 50.0f, PartType::cy_0, Organelle::none);
+					// 四角
+					newCell.createblock(newCell.id, Vector2{-1,-1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{1,-1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{-1,1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{1,1}, 1.0f, 40.0f, PartType::cy_0, Organelle::none);
+					// 外圈十字
+					newCell.createblock(newCell.id, Vector2{-2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{2,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{0,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{0,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					// 扩张
+					newCell.createblock(newCell.id, Vector2{0,3}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{1,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{2,1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{3,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{2,-1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{1,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{0,-3}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{-1,-2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{-2,-1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{-3,0}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{-2,1}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					newCell.createblock(newCell.id, Vector2{-1,2}, 0.6f, 30.0f, PartType::cy_0, Organelle::none);
+					break;
+				default:
+					break;
+				}
+				
+				// 随机生成刺细胞
+				float spikechance = 0.3f;
+				Vector2 dirs[4] = {{0,-32},{0,32},{-32,0},{32,0}};
+				for (const auto& block : newCell.Blocks) {
+					int type = (int)block.parttype;
+					if (!(type >= 1 && type < CONNECT_INDEX)) continue;
+					for (const auto& d : dirs) {
+						Vector2 checkpos = block.local + d;
+						bool occupied = false;
+						for (const auto& existing : newCell.Blocks) {
+							if (existing.local == checkpos) {
+								occupied = true;
+								break;
+							}
+						}
+						if (!occupied && RandomFloat(0.0f, 1.0f) < spikechance) {
+							Vector2 gridpos = {checkpos.x / 32, checkpos.y / 32};
+							newCell.createblock(newCell.id, gridpos, 0.8f, 20.0f, PartType::spike, Organelle::none);
 						}
 					}
-					if(!occupied && RandomFloat(0.0f,1.0f)<spikechance)
-					{
-						Vector2 gridpos={checkpos.x/32,checkpos.y/32};
-						newCell.Blocks.emplace_back(newCell.id,gridpos,0.8f,20.0f,PartType::spike,Organelle::none);
-					}
 				}
+				break;
 			}
-			break;
-		}
 		default:
 			return;
 			break;
 		}
+		
 		Livings.push_back(newCell);
 	}
 };
@@ -1089,7 +1144,7 @@ struct UI
 			else
 			{
 				DrawTextEx(font,text.c_str(),{position.x+240,position.y+28},48,0,WHITE);
-			}
+			} 
 			break;
 		case 2:
 		{
@@ -1103,8 +1158,9 @@ struct UI
 			{
 				DrawTexturePro(texture,wave.source,{position.x+wave.baseposition.x+wave.position,position.y+wave.baseposition.y,wave.source.width*scale,wave.source.height*scale},{0,0},0.0f,WHITE);
 			}
-			float texthp=Livings[playerID].Blocks[playernucleusindex].hp;
+			float texthp;
 			if(playerID==-1) texthp=0.0f;
+			else texthp=Livings[playerID].Blocks[playernucleusindex].hp;
 			DrawTextEx(font,TextFormat("%.1f",texthp),{position.x+157,position.y+184},36,0,RED);
 			break;
 		}
@@ -1243,6 +1299,38 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 							if(block.organelle==Organelle::nucleus)
 							{
 								ui2.warning=true;
+							}
+						}
+						for(auto& other:Livings[Bullet_pool.Bullets[i].belongto_living_index].Blocks)
+						{
+							if(other.organelle==Organelle::mitochondrion && !other.overload)
+							{
+								Vector2 shooterlocal={0,0};
+								bool found_shooter=false;
+								for(auto& shooter:Livings[Bullet_pool.Bullets[i].belongto_living_index].Blocks)
+								{
+									if(shooter.blockID==Bullet_pool.Bullets[i].belongto_block_index)
+									{
+										found_shooter=true;
+										shooterlocal=shooter.local;
+										break;
+									}
+								}
+								if(found_shooter)
+								{
+									float d=Vector2Distance(shooterlocal,other.local);
+									if(d<40.0f)
+									{
+										other.charge+=5.0f;
+										if(other.charge>=other.maxcharge)
+										{
+											other.charge=other.maxcharge;
+											other.overload=true;
+											other.overloadtimer=1.0f;
+											Particle_master.createparticle(Particletype::overloadring,Livings[Bullet_pool.Bullets[i].belongto_living_index].position+other.rocate,{0,0},0,YELLOW,200,1);
+										}
+									}
+								}
 							}
 						}
 						Bullet_pool.Bullets[i].is_active=false;
@@ -1443,7 +1531,7 @@ void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Cam
 							}
 							else
 							{
-								Block block(Livings[builder.playerID].id,UI1_grid,this_part.mass,this_part.hp,this_part.parttype,this_part.organelle);
+								Block block(Livings[builder.playerID].id,Livings[builder.playerID].nextblockID++,UI1_grid,this_part.mass,this_part.hp,this_part.parttype,this_part.organelle);
 								Livings[builder.playerID].Blocks.push_back(block);
 							}
 							Livings[builder.playerID].rebulildcell();
@@ -1649,7 +1737,7 @@ int main()
 	Music bgm=LoadMusicStream("asset/sound/face_down.mp3");
 	SetMusicVolume(bgm,0.8);
 	SoundPool Sound_pool;
-	Sound_pool.init(shoot1,1);
+	Sound_pool.init(shoot1,5);
 	Sound_pool.init(shoot2,7);
 	Sound_pool.init(hit,7);
 	Sound_pool.init(broken1,3);
