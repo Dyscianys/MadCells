@@ -452,6 +452,10 @@ struct Block
 			}
 		}
 		Drawlight(texture,parttype,organelle,lightcolor,pos,d,blo_d,organ_d);
+		if(overloadinfluence || overload)
+		{
+			DrawRectanglePro(dest,{16,16},d+blo_d,{255,255,0,150});
+		}
 		if(hittimer>0.0f)
 		{
 			DrawRectanglePro({pos.x,pos.y,32,32},{16,16},d,{255,255,255,200});
@@ -1321,12 +1325,12 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 									float d=Vector2Distance(shooterlocal,other.local);
 									if(d<40.0f)
 									{
-										other.charge+=5.0f;
+										other.charge+=3.334f;
 										if(other.charge>=other.maxcharge)
 										{
 											other.charge=other.maxcharge;
 											other.overload=true;
-											other.overloadtimer=1.0f;
+											other.overloadtimer=3.0f;
 											Particle_master.createparticle(Particletype::overloadring,Livings[Bullet_pool.Bullets[i].belongto_living_index].position+other.rocate,{0,0},0,YELLOW,200,1);
 											Sound_pool.play(dong,min(0.8f,10.0f/dist));
 										}
