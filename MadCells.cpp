@@ -839,7 +839,7 @@ struct Cell
 					switch(drop->type)
 					{
 					case Droptype::sugermonomer:
-						energy+=2.0f;
+						energy+=3.0f;
 						break;
 					case Droptype::sugerdimer:
 						energy+=5.0f;
@@ -1323,7 +1323,7 @@ struct UI
 			}
 			break;
 		case 3:
-			timer+=5.0f*deltaT;
+			timer+=8.0f*deltaT;
 			if(timer>=19.0f) timer-=19.0f;
 			break;
 		default:
@@ -1376,15 +1376,18 @@ struct UI
 				float t=(Livings[playerID].energy/Livings[playerID].maxenergy);
 				DrawRectanglePro({position.x+545,position.y+280,10.0f*scale,t*200.0f},{0,0},180.0f,{0,255,255,255});
 				textenergy=Livings[playerID].energy;
+				int row=(int)timer/3;
+				int col=(int)timer%3;
+				Color warning;
+				if((int)(timer*2)%2==0 && textenergy<20.0f) warning=RED;
+				else warning=WHITE;
+				DrawTexturePro(texture,{(float)col*96,(float)row*48+356,96,48},{position.x+310,position.y+190,120*scale,60*scale},{0,0},0.0f,warning);
 			}
 			else
 			{
 				textenergy=0.0f;
 			}
 			DrawTextEx(font,TextFormat("%.1f",textenergy),{position.x+435,position.y+143},36,0,{0,255,255,255});
-			int row=(int)timer/3;
-			int col=(int)timer%3;
-			DrawTexturePro(texture,{(float)col*96,(float)row*48+356,96,48},{position.x+310,position.y+190,120*scale,60*scale},{0,0},0.0f,WHITE);
 		}
 		default:
 			break;
@@ -1662,7 +1665,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 	}
 	for(auto it=Livings.begin();it!=Livings.end();)
 	{
-		if(it->isdead || it->Blocks.empty())
+		if(it->isdead || it->Blocks.empty() || it->energy<=0.0f)
 		{
 			if(it->id==playerID)
 			{
