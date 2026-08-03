@@ -698,8 +698,8 @@ struct Cell
 	Color color;
 	bool isdead=false;
 	int nextblockID=0;
-	float maxenergy=100.0f;
-	float energy=maxenergy;
+	float maxenergy=300.0f;
+	float energy=100.0f;
 	
 	void update(float deltaT,Camera2D& gamecamera,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2)
 	{
@@ -716,6 +716,7 @@ struct Cell
 			block.rocate.y=(block.local.x-center.x)*sind+(block.local.y-center.y)*cosd;
 			if(block.timer>0.0f) block.timer-=deltaT;
 			if(block.hittimer>0.0f) block.hittimer-=deltaT;
+			energy-=0.05f*deltaT;
 			if(block.state==Blockstate::active)
 			{
 				switch(block.organelle)
@@ -730,22 +731,28 @@ struct Cell
 						sum_d+=90;
 						rad=sum_d*DEG2RAD;
 						if(block.overloadinfluence) block.force=360.0f;
+						else if(energy<20.0f) block.force=120.0f;
 						else block.force=180.0f;
 						force(block.rocate,{cosf(rad)*block.force*deltaT,sinf(rad)*block.force*deltaT});
+						energy-=0.5*deltaT;
 						break;
 					case PartType::cilium_left:
 						sum_d+=0;
 						rad=sum_d*DEG2RAD;
 						if(block.overloadinfluence) block.force=160.0f;
+						else if(energy<20.0f) block.force=60.0f;
 						else block.force=80.0f;
 						force(block.rocate,{cosf(rad)*block.force*deltaT,sinf(rad)*block.force*deltaT});
+						energy-=0.3f*deltaT;
 						break;
 					case PartType::cilium_right:
 						sum_d+=180;
 						rad=sum_d*DEG2RAD;
 						if(block.overloadinfluence) block.force=160.0f;
+						else if(energy<20.0f) block.force=60.0f;
 						else block.force=80.0f;
 						force(block.rocate,{cosf(rad)*block.force*deltaT,sinf(rad)*block.force*deltaT});
+						energy-=0.3f*deltaT;
 						break;
 					case PartType::spike:
 						if(block.timer<=0.0f)
@@ -775,8 +782,10 @@ struct Cell
 						Particle_master.createparticle(Particletype::bubble,position+block.rocate,Vector2{cosf(rad)*500,sinf(rad)*500},0,Color{0,0,0,0},0,RandomInt(2,5));
 						Sound_pool.play(shoot1,1.0f);
 						if(block.overloadinfluence) block.firetimer=0.1f;
+						else if(energy<20.0f) block.firetimer=0.3f;
 						else block.firetimer=0.2f;
 						block.timer=block.firetimer;
+						energy-=1.0f;
 					}
 					break;
 				default:
@@ -850,6 +859,7 @@ struct Cell
 				}
 				drop++;
 			}
+			if(energy>maxenergy) energy=maxenergy;
 		}
 	}
 	void found_center()
@@ -940,15 +950,42 @@ struct Cell
 				}
 			}
 		}
-		for(auto it=Blocks.begin();it!=Blocks.end();)
-		{
-			int idx=it-Blocks.begin();
-			if(!connected[idx])
-			{
-				it=Blocks.erase(it);
+		//这是deepseek帮忙修改的↓
+		// 1. 删除不连通的主干块（细胞质块和细胞核）
+		for (auto it = Blocks.begin(); it != Blocks.end(); ) {
+			int idx = it - Blocks.begin();
+			bool isMain = ((int)it->parttype >= 1 && (int)it->parttype < CONNECT_INDEX) || it->organelle == Organelle::nucleus;
+			if (isMain && !connected[idx]) {
+				it = Blocks.erase(it);
+			} else {
+				++it;
 			}
-			else
-			{
+		}
+		// 2. 删除没有相邻主干块的附属块
+		for (auto it = Blocks.begin(); it != Blocks.end(); ) {
+			bool isMain = ((int)it->parttype >= 1 && (int)it->parttype < CONNECT_INDEX) || it->organelle == Organelle::nucleus;
+			if (!isMain) {
+				bool hasMainNeighbor = false;
+				Vector2 dirs[4] = {{0,-32},{0,32},{-32,0},{32,0}};
+				for (auto& d : dirs) {
+					Vector2 nPos = it->local + d;
+					for (auto& neighbor : Blocks) {
+						if (neighbor.local == nPos) {
+							int nType = (int)neighbor.parttype;
+							if ((nType >= 1 && nType < CONNECT_INDEX) || neighbor.organelle == Organelle::nucleus) {
+								hasMainNeighbor = true;
+								break;
+							}
+						}
+					}
+					if (hasMainNeighbor) break;
+				}
+				if (!hasMainNeighbor) {
+					it = Blocks.erase(it);
+				} else {
+					++it;
+				}
+			} else {
 				++it;
 			}
 		}
@@ -1047,7 +1084,7 @@ struct Cell
 				if(block->organelle==Organelle::nucleus) isdead=true;
 				float dist=Vector2Distance(position+block->rocate,gamecamera.target)/32.0f;
 				Sound_pool.play(broken2,min(1.2f,15.0f/dist));
-				Drop_master.createdrop(Droptype::sugermonomer,position+block->rocate,50,0,RandomInt(1,3));
+				Drop_master.createdrop(Droptype::sugermonomer,position+block->rocate,50,0,RandomInt(1,2));
 				Drop_master.createdrop(Droptype::sugerdimer,position+block->rocate,50,0,RandomInt(-5,2));
 				block=Blocks.erase(block);
 				need_to_rebuild=true;
@@ -1217,6 +1254,7 @@ struct Cellbuilder
 		Livings.push_back(newCell);
 	}
 };
+
 struct Waveform
 {
 	Vector2 baseposition={145,240};
@@ -1235,7 +1273,6 @@ struct UI
 	float timer=0.0f,timer2=0.0f,timer3=0.0f;
 	Rectangle source;
 	bool warning=false;
-	float lastplayerenegy,deltaenergy;
 	void update(int type,float deltaT)
 	{
 		position+=(moveto-position)*lerp;
@@ -1286,11 +1323,9 @@ struct UI
 			}
 			break;
 		case 3:
-			if(playerID!=-1)
-			{
-				deltaenergy=Livings[playerID].energy-lastplayerenegy;
-				lastplayerenegy=Livings[playerID].energy;
-			}
+			timer+=5.0f*deltaT;
+			if(timer>=19.0f) timer-=19.0f;
+			break;
 		default:
 			break;
 		}
@@ -1335,11 +1370,21 @@ struct UI
 		{
 			DrawTexturePro(texture,source,{position.x,position.y,source.width*scale,source.height*scale},{0,0},0.0f,WHITE);
 			DrawTextEx(font,text.c_str(),{position.x-170,position.y+230},48,0,WHITE);
+			float textenergy;
 			if(playerID!=-1)
 			{
-				DrawRectanglePro({position.x+535,position.y+80,10.0f*scale,(Livings[playerID].energy/Livings[playerID].maxenergy)*200.0f},{0,0},0.0f,{0,255,255,255});
-				DrawRectanglePro({position.x+525,position.y+40,15.0f*scale,-deltaenergy*10.0f},{0,0},0.0f,{0,255,255,255});
+				float t=(Livings[playerID].energy/Livings[playerID].maxenergy);
+				DrawRectanglePro({position.x+545,position.y+280,10.0f*scale,t*200.0f},{0,0},180.0f,{0,255,255,255});
+				textenergy=Livings[playerID].energy;
 			}
+			else
+			{
+				textenergy=0.0f;
+			}
+			DrawTextEx(font,TextFormat("%.1f",textenergy),{position.x+435,position.y+143},36,0,{0,255,255,255});
+			int row=(int)timer/3;
+			int col=(int)timer%3;
+			DrawTexturePro(texture,{(float)col*96,(float)row*48+356,96,48},{position.x+310,position.y+190,120*scale,60*scale},{0,0},0.0f,WHITE);
 		}
 		default:
 			break;
@@ -1548,6 +1593,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 					if(zooming)
 					{
 						ui2.moveto={-400.0f,SCREEN_HEIGHT};
+						ui3.moveto={SCREEN_WIDTH-180.0f,SCREEN_HEIGHT};
 						gamecamera.zoom+=gamecamera.zoom*gamecamera.zoom*deltaT;
 						if(gamecamera.zoom>=400.0f)
 						{
@@ -1558,6 +1604,8 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 							ui1.position2={0,0};
 							ui2.position={-400.0f,SCREEN_HEIGHT};
 							ui2.moveto={20.0f,SCREEN_HEIGHT-300};
+							ui3.position={SCREEN_WIDTH-180.0f,SCREEN_HEIGHT};
+							ui3.moveto={SCREEN_WIDTH-560.0f,SCREEN_HEIGHT-300};
 							for(auto& it:Partlibrary)
 							{
 								it.timer=it.retimer;
@@ -1567,7 +1615,8 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 					}
 					else
 					{
-						gamecamera.zoom+=(1.0f-gamecamera.zoom)*0.1;
+						if(it.energy<20.0f) gamecamera.zoom+=(1.5f-gamecamera.zoom)*0.07;
+						else gamecamera.zoom+=(1.0f-gamecamera.zoom)*0.1;
 						gamecamera.offset.x=(SCREEN_WIDTH/2)+shake.x;
 						gamecamera.offset.y=(SCREEN_HEIGHT/2)+shake.y;
 					}
@@ -1626,9 +1675,9 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 			shake.x=RandomFloat(-shakeclass,shakeclass);
 			shake.y=RandomFloat(-shakeclass,shakeclass);
 			Sound_pool.play(broken1,min(1.5f,25.0f/dist));
-			Drop_master.createdrop(Droptype::sugermonomer,it->position+it->center,200,0,RandomInt(5,10));
-			Drop_master.createdrop(Droptype::sugerdimer,it->position+it->center,200,0,RandomInt(1,5));
-			Drop_master.createdrop(Droptype::sugerpolymer,it->position+it->center,200,0,RandomInt(0,3));
+			Drop_master.createdrop(Droptype::sugermonomer,it->position+it->center,200,0,RandomInt(3,5));
+			Drop_master.createdrop(Droptype::sugerdimer,it->position+it->center,200,0,RandomInt(1,3));
+			Drop_master.createdrop(Droptype::sugerpolymer,it->position+it->center,200,0,RandomInt(0,2));
 			it=Livings.erase(it);
 		}
 		else
