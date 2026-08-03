@@ -26,7 +26,7 @@ float RandomFloat(float min,float max) {
 
 enum class GameState
 {
-	GAMING,ASSEMBLING
+	GAMING,ASSEMBLING,MEMU,CREATER
 };
 enum class Type
 {
@@ -63,6 +63,8 @@ enum class Droptype
 {
 	sugermonomer,sugerdimer,sugerpolymer
 };
+
+GameState interface=GameState::CREATER;
 
 struct Sound2D
 {
@@ -1300,7 +1302,7 @@ struct UI
 	Vector2 position2={0,0},moveto2;
 	float lerp2=0.15f;
 	bool fold,left,active=false;
-	float timer=0.0f,timer2=0.0f,timer3=0.0f;
+	float timer=0.0f,timer2=0.0f,timer3=0.0f,timer4=0.0f;
 	Rectangle source;
 	bool warning=false;
 	bool dying=false;
@@ -1357,6 +1359,16 @@ struct UI
 		case 3:
 			timer+=8.0f*deltaT;
 			if(timer>=19.0f) timer-=19.0f;
+			break;
+		case 4://creater界面
+			timer2+=deltaT;
+			if(timer<1.0f){timer+=0.6f*deltaT;break;}
+			timer=1.0f;
+			if(timer2<4.0f) break;
+			if(timer3<1.0f){timer3+=deltaT;break;}
+			timer3=1.0f;
+			if(timer4<2.0f){timer4+=deltaT;break;}
+			interface=GameState::GAMING;
 			break;
 		default:
 			break;
@@ -1457,6 +1469,15 @@ struct UI
 			else warning={0,0,200,255};
 			DrawTexturePro(texture,{517,0,36,36},{position.x+452,position.y-9,48*scale,48*scale},{0,0},0.0f,warning);
 			DrawTexturePro(texture,{554,0,66,16},{position.x,position.y+190,88*scale,21*scale},{0,0},0.0f,warning);
+			break;
+		}
+		case 4:
+		{
+			float alpha=timer*(1.0f-timer3);
+			int f=(int)(timer2*8)%3;
+			float scale=1.5f;
+			DrawTexturePro(texture,{f*64.0f,0,64,64},{SCREEN_WIDTH/2.0f,SCREEN_HEIGHT/2.0f,64*scale,64*scale},{32*scale,32*scale},0.0f,{255,255,255,(unsigned char)(alpha*255)});
+			break;
 		}
 		default:
 			break;
@@ -2012,7 +2033,26 @@ void DrawAssembling(Texture2D texture_all_parts,Texture2D texture_ui,Camera2D as
 	EndMode2D();
 }
 
+void UpdateCreater(float deltaT,UI& ui4)
+{
+	ui4.update(4,deltaT);
+}
 
+void DrawCreater(Texture2D texture,UI& ui4,Font& font)
+{
+	ClearBackground(BLACK);
+	ui4.draw(texture,4,font,"");
+}
+
+void UpdateMenu()
+{
+	
+}
+
+void DrawMenu()
+{
+	
+}
 
 int main()
 {	
@@ -2020,7 +2060,6 @@ int main()
 	InitAudioDevice();
 	SetTargetFPS(60);
 	
-	GameState interface=GameState::GAMING;
 	bool zooming=false;
 	
 	Vector2 mouseworldposition;
@@ -2039,6 +2078,7 @@ int main()
 	Texture2D background=LoadTexture("asset/background.png");
 	Texture2D texture_all_parts=LoadTexture("asset/parts.png");
 	Texture2D texture_ui=LoadTexture("asset/ui.png");
+	Texture2D texture_Dyx=LoadTexture("asset/Dyx.png");
 	Sound shoot1=LoadSound("asset/sound/shoot1.wav");
 	Sound shoot2=LoadSound("asset/sound/shoot2.wav");
 	Sound hit=LoadSound("asset/sound/hit.wav");
@@ -2069,7 +2109,7 @@ int main()
 		Bullet_pool.Bullets[i].is_active=false;
 	}
 	
-	UI ui1,ui2,ui3;
+	UI ui1,ui2,ui3,ui4;
 	ui1.fold=true;
 	ui1.position={-400.0f,50.0f};
 	ui1.left=true;
@@ -2084,7 +2124,7 @@ int main()
 	ui3.source={328,126,330,166};
 	ui3.lerp=0.05f;
 	
-	string all_text="qwertyuiopasdfghjklzxcvbnm.0123456789零件库健康指示能量濒死";
+	string all_text="qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM.0123456789零件库健康指示能量濒死浮游狂胞";
 	int codepointcount;
 	int* codepoints=LoadCodepoints(all_text.c_str(),&codepointcount);
 	Font font=LoadFontEx("fonts/Madfont.ttf",48,codepoints,codepointcount);
@@ -2116,6 +2156,16 @@ int main()
 			UpdateAssembling(deltaT,interface,gamecamera,assemcamera,builder,mouseworldposition,zooming,Partlibrary,ui1,UI1_grid);
 			break;
 		}
+		case GameState::CREATER:
+		{
+			UpdateCreater(deltaT,ui4);
+			break;
+		}
+		case GameState::MEMU:
+		{
+			UpdateMenu();
+			break;
+		}
 		default:break;
 		}
 		BeginDrawing();
@@ -2131,6 +2181,16 @@ int main()
 			DrawAssembling(texture_all_parts,texture_ui,assemcamera,builder,ui1,UI1_grid,font,Partlibrary);
 			break;
 		}
+		case GameState::CREATER:
+		{
+			DrawCreater(texture_Dyx,ui4,font);
+			break;
+		}
+		case GameState::MEMU:
+		{
+			DrawMenu();
+			break;
+		}
 		default:break;
 		}
 		EndDrawing();
@@ -2141,6 +2201,7 @@ int main()
 	UnloadTexture(background);
 	UnloadTexture(texture_all_parts);
 	UnloadTexture(texture_ui);
+	UnloadTexture(texture_Dyx);
 	UnloadSound(shoot1);
 	UnloadSound(shoot2);
 	UnloadSound(hit);
