@@ -700,8 +700,11 @@ struct Cell
 	int nextblockID=0;
 	float maxenergy=300.0f;
 	float energy=100.0f;
+	float energydying=false;
+	float eneggydyingtimer=0.0f;
+	float dyingsoundtimer=0.0f;
 	
-	void update(float deltaT,Camera2D& gamecamera,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2)
+	void update(float deltaT,Camera2D& gamecamera,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2,Sound& di)
 	{
 		velocity=velocity*0.9f;
 		vd*=0.9;
@@ -716,7 +719,10 @@ struct Cell
 			block.rocate.y=(block.local.x-center.x)*sind+(block.local.y-center.y)*cosd;
 			if(block.timer>0.0f) block.timer-=deltaT;
 			if(block.hittimer>0.0f) block.hittimer-=deltaT;
-			energy-=0.05f*deltaT;
+			if(type==Type::player)
+			{
+				energy-=0.05f*deltaT;
+			}
 			if(block.state==Blockstate::active)
 			{
 				switch(block.organelle)
@@ -730,7 +736,8 @@ struct Cell
 					case PartType::mount:
 						sum_d+=90;
 						rad=sum_d*DEG2RAD;
-						if(block.overloadinfluence) block.force=360.0f;
+						if(energydying) block.force=60.0f;
+						else if(block.overloadinfluence) block.force=360.0f;
 						else if(energy<20.0f) block.force=120.0f;
 						else block.force=180.0f;
 						force(block.rocate,{cosf(rad)*block.force*deltaT,sinf(rad)*block.force*deltaT});
@@ -739,7 +746,8 @@ struct Cell
 					case PartType::cilium_left:
 						sum_d+=0;
 						rad=sum_d*DEG2RAD;
-						if(block.overloadinfluence) block.force=160.0f;
+						if(energydying) block.force=30.0f;
+						else if(block.overloadinfluence) block.force=160.0f;
 						else if(energy<20.0f) block.force=60.0f;
 						else block.force=80.0f;
 						force(block.rocate,{cosf(rad)*block.force*deltaT,sinf(rad)*block.force*deltaT});
@@ -748,7 +756,8 @@ struct Cell
 					case PartType::cilium_right:
 						sum_d+=180;
 						rad=sum_d*DEG2RAD;
-						if(block.overloadinfluence) block.force=160.0f;
+						if(energydying) block.force=30.0f;
+						else if(block.overloadinfluence) block.force=160.0f;
 						else if(energy<20.0f) block.force=60.0f;
 						else block.force=80.0f;
 						force(block.rocate,{cosf(rad)*block.force*deltaT,sinf(rad)*block.force*deltaT});
@@ -774,7 +783,7 @@ struct Cell
 					break;
 				}
 				case Organelle::specialized_oral_groove:
-					if(block.timer<=0)
+					if(block.timer<=0 && !energydying)
 					{
 						Bullet_pool.fire(Bullettype::foodvacuole,id,block.blockID,position+block.rocate,block.organelle_direction,shake,20.0f);
 						float rad=DEG2RAD*block.organelle_direction;
@@ -860,6 +869,27 @@ struct Cell
 				drop++;
 			}
 			if(energy>maxenergy) energy=maxenergy;
+		}
+		if(energy<=0.0f)
+		{
+			energy=0.0f;
+			energydying=true;
+			eneggydyingtimer-=deltaT;
+			dyingsoundtimer-=deltaT;
+			if(dyingsoundtimer<=0.0f)
+			{
+				dyingsoundtimer=1.0f;
+				Sound_pool.play(di,1.0f);
+			}
+			if(eneggydyingtimer<=0.0f)
+			{
+				isdead=true;
+			}
+		}
+		else
+		{
+			energydying=false;
+			eneggydyingtimer=5.0f;
 		}
 	}
 	void found_center()
@@ -1273,6 +1303,8 @@ struct UI
 	float timer=0.0f,timer2=0.0f,timer3=0.0f;
 	Rectangle source;
 	bool warning=false;
+	bool dying=false;
+	bool dead=false;
 	void update(int type,float deltaT)
 	{
 		position+=(moveto-position)*lerp;
@@ -1355,7 +1387,12 @@ struct UI
 			Color warningcolor;
 			if(warning) warningcolor={255,0,0,255};
 			else warningcolor={255,255,255,255};
-			if(playerID!=-1) DrawTexturePro(texture,{floor(timer)*64.0f,292,64,64},{position.x+17,position.y+160,64*scale,64*scale},{0,0},0.0f,warningcolor);
+			if(playerID!=-1)
+			{
+				dead=false;
+				DrawTexturePro(texture,{floor(timer)*64.0f,292,64,64},{position.x+17,position.y+160,64*scale,64*scale},{0,0},0.0f,warningcolor);
+			}
+			else dead=true;
 			for(auto& wave:waves)
 			{
 				DrawTexturePro(texture,wave.source,{position.x+wave.baseposition.x+wave.position,position.y+wave.baseposition.y,wave.source.width*scale,wave.source.height*scale},{0,0},0.0f,WHITE);
@@ -1364,6 +1401,21 @@ struct UI
 			if(playerID==-1) texthp=0.0f;
 			else texthp=Livings[playerID].Blocks[playernucleusindex].hp;
 			DrawTextEx(font,TextFormat("%.1f",texthp),{position.x+157,position.y+184},36,0,RED);
+			if(texthp<=5.0f) dying=true;
+			else dying=false;
+			if(dead) warningcolor=RED;
+			else if(dying)
+			{
+				if((int)timer%2==0)
+				{
+					warningcolor=RED;
+					DrawTextEx(font,"濒死warning",{position.x+570,position.y+150},72,0,RED);
+				}
+				else warningcolor={0,0,200,255};
+			}
+			else warningcolor={0,0,200,255};
+			DrawTexturePro(texture,{416,0,36,36},{position.x+22,position.y-9,48*scale,48*scale},{0,0},0.0f,warningcolor);
+			DrawTexturePro(texture,{452,0,66,16},{position.x+415,position.y+190,88*scale,21*scale},{0,0},0.0f,warningcolor);
 			break;
 		}
 		case 3:
@@ -1371,6 +1423,7 @@ struct UI
 			DrawTexturePro(texture,source,{position.x,position.y,source.width*scale,source.height*scale},{0,0},0.0f,WHITE);
 			DrawTextEx(font,text.c_str(),{position.x-170,position.y+230},48,0,WHITE);
 			float textenergy;
+			Color warning;
 			if(playerID!=-1)
 			{
 				float t=(Livings[playerID].energy/Livings[playerID].maxenergy);
@@ -1378,16 +1431,32 @@ struct UI
 				textenergy=Livings[playerID].energy;
 				int row=(int)timer/3;
 				int col=(int)timer%3;
-				Color warning;
 				if((int)(timer*2)%2==0 && textenergy<20.0f) warning=RED;
 				else warning=WHITE;
 				DrawTexturePro(texture,{(float)col*96,(float)row*48+356,96,48},{position.x+310,position.y+190,120*scale,60*scale},{0,0},0.0f,warning);
+				dead=false;
+				if(Livings[playerID].energy<=0.001f) dying=true;
+				else dying=false;
 			}
 			else
 			{
+				dead=true;
 				textenergy=0.0f;
 			}
 			DrawTextEx(font,TextFormat("%.1f",textenergy),{position.x+435,position.y+143},36,0,{0,255,255,255});
+			if(dead) warning=RED;
+			else if(dying)
+			{
+				if((int)timer%2==0)
+				{
+					warning=RED;
+					DrawTextEx(font,"warning濒死",{position.x-370,position.y+150},72,0,RED);
+				}
+				else warning={0,0,200,255};
+			}
+			else warning={0,0,200,255};
+			DrawTexturePro(texture,{517,0,36,36},{position.x+452,position.y-9,48*scale,48*scale},{0,0},0.0f,warning);
+			DrawTexturePro(texture,{554,0,66,16},{position.x,position.y+190,88*scale,21*scale},{0,0},0.0f,warning);
 		}
 		default:
 			break;
@@ -1465,15 +1534,11 @@ int mod(int a,int b)
 	return (a%b+b)%b;
 }
 
-void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Music& bgm,UI& ui2,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2,Sound& hit,Sound& broken1,Sound& broken2,Sound& dong,UI& ui3)
+void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2D& assemcamera,Vector2& mouseworldposition,bool& zooming,vector<Part>&Partlibrary,UI& ui1,Music& bgm,UI& ui2,SoundPool& Sound_pool,Sound& shoot1,Sound& shoot2,Sound& hit,Sound& broken1,Sound& broken2,Sound& dong,UI& ui3,Sound& di)
 {
 	mouseworldposition=GetScreenToWorld2D(GetMousePosition(),gamecamera);
 	UpdateMusicStream(bgm);
 	if(!IsMusicStreamPlaying(bgm)) PlayMusicStream(bgm);
-	if(IsKeyPressed(KEY_E)) 
-	{
-		zooming=true;
-	}
 	shake.x*=RandomFloat(-0.99f,-0.5f);
 	shake.y*=RandomFloat(-0.99f,-0.5f);
 	for(int i=0;i<MAX_BULLETS;i++)//遍历子弹
@@ -1570,7 +1635,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 	}
 	for(auto& it:Livings)//遍历生物
 	{
-		it.update(deltaT,gamecamera,Sound_pool,shoot1,shoot2);
+		it.update(deltaT,gamecamera,Sound_pool,shoot1,shoot2,di);
 		it.delete_dead(gamecamera,Sound_pool,broken2);
 		if(it.need_to_rebuild)
 		{
@@ -1591,6 +1656,10 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 					else block.state=Blockstate::none;
 					break;
 				case Organelle::nucleus:
+					if(IsKeyPressed(KEY_E) && !it.energydying) 
+					{
+						zooming=true;
+					}
 					gamecamera.target.x+=(it.position.x+block.rocate.x-gamecamera.target.x)*0.15;
 					gamecamera.target.y+=(it.position.y+block.rocate.y-gamecamera.target.y)*0.15;
 					if(zooming)
@@ -1618,7 +1687,8 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 					}
 					else
 					{
-						if(it.energy<20.0f) gamecamera.zoom+=(1.5f-gamecamera.zoom)*0.07;
+						if(it.energydying) gamecamera.zoom+=(2.0f-gamecamera.zoom)*0.06;
+						else if(it.energy<20.0f) gamecamera.zoom+=(1.5f-gamecamera.zoom)*0.07;
 						else gamecamera.zoom+=(1.0f-gamecamera.zoom)*0.1;
 						gamecamera.offset.x=(SCREEN_WIDTH/2)+shake.x;
 						gamecamera.offset.y=(SCREEN_HEIGHT/2)+shake.y;
@@ -1665,7 +1735,7 @@ void UpdateGaming(float deltaT,GameState& interface,Camera2D& gamecamera,Camera2
 	}
 	for(auto it=Livings.begin();it!=Livings.end();)
 	{
-		if(it->isdead || it->Blocks.empty() || it->energy<=0.0f)
+		if(it->isdead || it->Blocks.empty())
 		{
 			if(it->id==playerID)
 			{
@@ -1734,51 +1804,54 @@ void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Cam
 					}
 				}
 				Findblockpickresult result;
-				if(this_part.organelle==Organelle::none)
-				{
-					if(this_part.parttype==PartType::none)
+				result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x)*32,(UI1_grid.y)*32});
+				if(!result.is_nucleus){
+					if(this_part.organelle==Organelle::none)
 					{
-						result=Livings[builder.playerID].Find_block_localposition(UI1_grid*32);
-						if(result.is_part)
+						if(this_part.parttype==PartType::none)
 						{
-							Livings[builder.playerID].Blocks.erase(Livings[builder.playerID].Blocks.begin()+result.block_index);
-							Livings[builder.playerID].rebulildcell();
+							result=Livings[builder.playerID].Find_block_localposition(UI1_grid*32);
+							if(result.is_part)
+							{
+								Livings[builder.playerID].Blocks.erase(Livings[builder.playerID].Blocks.begin()+result.block_index);
+								Livings[builder.playerID].rebulildcell();
+							}
+						}
+						else
+						{
+							int sum=0;
+							result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x+1)*32,(UI1_grid.y+0)*32});
+							sum+=result.is_cytosol;
+							result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x-1)*32,(UI1_grid.y+0)*32});
+							sum+=result.is_cytosol;
+							result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x+0)*32,(UI1_grid.y+1)*32});
+							sum+=result.is_cytosol;
+							result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x+0)*32,(UI1_grid.y-1)*32});
+							sum+=result.is_cytosol;
+							if(sum>0)
+							{
+								result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x)*32,(UI1_grid.y)*32});
+								if(result.is_part)
+								{
+									Livings[builder.playerID].Blocks[result.block_index].parttype=this_part.parttype;
+									Livings[builder.playerID].Blocks[result.block_index].organelle=Organelle::none;
+								}
+								else
+								{
+									Block block(Livings[builder.playerID].id,Livings[builder.playerID].nextblockID++,UI1_grid,this_part.mass,this_part.hp,this_part.parttype,this_part.organelle);
+									Livings[builder.playerID].Blocks.push_back(block);
+								}
+								Livings[builder.playerID].rebulildcell();
+							}
 						}
 					}
 					else
 					{
-						int sum=0;
-						result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x+1)*32,(UI1_grid.y+0)*32});
-						sum+=result.is_cytosol;
-						result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x-1)*32,(UI1_grid.y+0)*32});
-						sum+=result.is_cytosol;
-						result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x+0)*32,(UI1_grid.y+1)*32});
-						sum+=result.is_cytosol;
-						result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x+0)*32,(UI1_grid.y-1)*32});
-						sum+=result.is_cytosol;
-						if(sum>0)
+						result=Livings[builder.playerID].Find_block_localposition({UI1_grid.x*32,UI1_grid.y*32});
+						if(result.is_cytosol)
 						{
-							result=Livings[builder.playerID].Find_block_localposition({(UI1_grid.x)*32,(UI1_grid.y)*32});
-							if(result.is_part)
-							{
-								Livings[builder.playerID].Blocks[result.block_index].parttype=this_part.parttype;
-								Livings[builder.playerID].Blocks[result.block_index].organelle=Organelle::none;
-							}
-							else
-							{
-								Block block(Livings[builder.playerID].id,Livings[builder.playerID].nextblockID++,UI1_grid,this_part.mass,this_part.hp,this_part.parttype,this_part.organelle);
-								Livings[builder.playerID].Blocks.push_back(block);
-							}
-							Livings[builder.playerID].rebulildcell();
+							Livings[builder.playerID].Blocks[result.block_index].organelle=this_part.organelle;
 						}
-					}
-				}
-				else
-				{
-					result=Livings[builder.playerID].Find_block_localposition({UI1_grid.x*32,UI1_grid.y*32});
-					if(result.is_cytosol)
-					{
-						Livings[builder.playerID].Blocks[result.block_index].organelle=this_part.organelle;
 					}
 				}
 			}
@@ -1972,6 +2045,7 @@ int main()
 	Sound broken1=LoadSound("asset/sound/broken1.wav");
 	Sound broken2=LoadSound("asset/sound/broken2.wav");
 	Sound dong=LoadSound("asset/sound/dong.wav");
+	Sound di=LoadSound("asset/sound/di.wav");
 	Music bgm=LoadMusicStream("asset/sound/face_down.mp3");
 	SetMusicVolume(bgm,0.8);
 	SoundPool Sound_pool;
@@ -1981,6 +2055,7 @@ int main()
 	Sound_pool.init(broken1,3);
 	Sound_pool.init(broken2,5);
 	Sound_pool.init(dong,5);
+	Sound_pool.init(di,2);
 	
 	Cellbuilder builder;
 	builder.create(Type::player,Vector2{0,0},0.0f);
@@ -2009,7 +2084,7 @@ int main()
 	ui3.source={328,126,330,166};
 	ui3.lerp=0.05f;
 	
-	string all_text="零件库健康指示.0123456789能量";
+	string all_text="qwertyuiopasdfghjklzxcvbnm.0123456789零件库健康指示能量濒死";
 	int codepointcount;
 	int* codepoints=LoadCodepoints(all_text.c_str(),&codepointcount);
 	Font font=LoadFontEx("fonts/Madfont.ttf",48,codepoints,codepointcount);
@@ -2033,7 +2108,7 @@ int main()
 		{
 		case GameState::GAMING:
 		{
-			UpdateGaming(deltaT,interface,gamecamera,assemcamera,mouseworldposition,zooming,Partlibrary,ui1,bgm,ui2,Sound_pool,shoot1,shoot2,hit,broken1,broken2,dong,ui3);
+			UpdateGaming(deltaT,interface,gamecamera,assemcamera,mouseworldposition,zooming,Partlibrary,ui1,bgm,ui2,Sound_pool,shoot1,shoot2,hit,broken1,broken2,dong,ui3,di);
 			break;
 		}
 		case GameState::ASSEMBLING:
@@ -2072,6 +2147,7 @@ int main()
 	UnloadSound(broken1);
 	UnloadSound(broken2);
 	UnloadSound(dong);
+	UnloadSound(di);
 	UnloadMusicStream(bgm);
 	
 	return 0;
