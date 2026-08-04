@@ -577,7 +577,7 @@ struct Block
 		{
 			DrawRectanglePro(dest,{16,16},d+blo_d,{255,255,0,150});
 		}
-		if(hittimer>0.0f)
+		if(hittimer>0.0f && interface==GameState::GAMING)
 		{
 			DrawRectanglePro({pos.x,pos.y,32,32},{16,16},d,{255,255,255,200});
 		}
