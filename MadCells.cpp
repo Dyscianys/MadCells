@@ -1190,8 +1190,8 @@ struct Cellbuilder
 			newCell.createblock(newCell.id, Vector2{0,0}, 1.1f, 50.0f, PartType::cy_0, Organelle::mitochondrion);
 			newCell.createblock(newCell.id, Vector2{1,0}, 1.5f, 50.0f, PartType::cy_0, Organelle::specialized_oral_groove);
 			newCell.createblock(newCell.id, Vector2{-2,0}, 0.4f, 30.0f, PartType::mount, Organelle::none);
-			newCell.createblock(newCell.id, Vector2{0,-1}, 0.3f, 20.0f, PartType::cilium_left, Organelle::none);
-			newCell.createblock(newCell.id, Vector2{0,1}, 0.3f, 20.0f, PartType::cilium_right, Organelle::none);
+			newCell.createblock(newCell.id, Vector2{0,-1}, 0.2f, 20.0f, PartType::cilium_left, Organelle::none);
+			newCell.createblock(newCell.id, Vector2{0,1}, 0.2f, 20.0f, PartType::cilium_right, Organelle::none);
 			break;
 			
 			case Type::chlorella: {
@@ -1805,8 +1805,8 @@ void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Cam
 	mouseworldposition=GetScreenToWorld2D(GetMousePosition(),assemcamera);
 	assemcamera.target=Vector2Scale(mouseworldposition,0.2f);
 	ui1.update(1,deltaT);
-	UI1_grid.x=(int)roundf(((mouseworldposition.x-Livings[builder.playerID].center.x)/32.0f));
-	UI1_grid.y=(int)roundf(((mouseworldposition.y-Livings[builder.playerID].center.y)/32.0f));
+	UI1_grid.x=(int)roundf(((mouseworldposition.x)/32.0f));
+	UI1_grid.y=(int)roundf(((mouseworldposition.y)/32.0f));
 	if(!zooming)
 	{
 		if(ui1.position.x>0.0f) ui1.fold=false;
@@ -1872,7 +1872,7 @@ void UpdateAssembling(float deltaT,GameState& interface,Camera2D& gamecamera,Cam
 						if(result.is_cytosol)
 						{
 							Livings[builder.playerID].Blocks[result.block_index].organelle=this_part.organelle;
-							Livings[builder.playerID].Blocks[result.block_index].mass+=this_part.mass;
+							Livings[builder.playerID].Blocks[result.block_index].mass=1.0f+this_part.mass;
 							Livings[builder.playerID].rebulildcell();
 						}
 					}
@@ -2028,7 +2028,7 @@ void DrawAssembling(Texture2D texture_all_parts,Texture2D texture_ui,Camera2D as
 	{
 		block.Drawblock(texture_all_parts,Type::player,block.local,0.0f,block.direction,0.0f);
 	}
-	DrawCircleV(Livings[builder.playerID].center,10,RED);
+	DrawCircleV(Livings[builder.playerID].center,3.0f,RED);
 	if(ui1.active)
 	{
 		DrawTexturePro(texture_ui,{284,44,34,34},{UI1_grid.x*32.0f,UI1_grid.y*32.0f,34,34},{17,17},0.0f,WHITE);
@@ -2138,7 +2138,7 @@ int main()
 		{0,"空",{0,0,32,32},0.0f,0.0f,PartType::none,Organelle::none,0.0f},
 		{1,"细胞质块",{192,0,32,32},1.0f,50.0f,PartType::cy_0,Organelle::none,0.1F},
 		{2,"鞭毛基底",{224,0,32,32},0.4F,30.0F,PartType::mount,Organelle::none,0.2F},
-		{3,"左纤毛",{256,0,32,32},0.3f,20.0f,PartType::cilium_left,Organelle::none,0.3f},
+		{3,"左纤毛",{256,0,32,32},0.2f,20.0f,PartType::cilium_left,Organelle::none,0.3f},
 		{4,"右纤毛",{288,0,32,32},0.2f,20.0f,PartType::cilium_right,Organelle::none,0.4f},
 		//{5,"细胞核",{32,32,32,32},0.5f,0.0f,PartType::none,Organelle::nucleus,0.5f},
 		{5,"线粒体",{64,32,32,32},0.1f,0.0f,PartType::none,Organelle::mitochondrion,0.6f},
